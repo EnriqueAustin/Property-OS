@@ -1,0 +1,23 @@
+{
+  "name": "@propertyos/widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/widget.iife.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "terser": "^5.48.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.4.2"
+  }
+}

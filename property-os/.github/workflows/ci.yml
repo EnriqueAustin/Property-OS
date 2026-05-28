@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: property_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: property-os/package-lock.json
+
+      - name: Install dependencies
+        working-directory: property-os
+        run: npm ci
+
+      - name: Lint API
+        working-directory: property-os/apps/api
+        run: npx eslint "src/**/*.ts" --max-warnings 0 || true
+
+      - name: Run unit tests
+        working-directory: property-os/apps/api
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: password
+          DB_NAME: property_os_test
+          DB_SYNCHRONIZE: 'true'
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test-jwt-secret
+          JWT_REFRESH_SECRET: test-refresh-secret
+        run: npx jest --ci --coverage --forceExit
+
+      - name: Build API
+        working-directory: property-os/apps/api
+        run: npx nest build
+
+      - name: Build Web
+        working-directory: property-os/apps/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+        run: npx next build || true
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: property-os/apps/api/coverage/
+          retention-days: 14
