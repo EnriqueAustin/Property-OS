@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsEmail,
   IsIn,
@@ -45,8 +46,14 @@ export class CreateBookingDto {
   @IsUUID()
   propertyId: string;
 
+  @IsOptional()
   @IsUUID()
-  roomId: string;
+  roomId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  roomIds?: string[];
 
   @IsDateString()
   checkIn: string;

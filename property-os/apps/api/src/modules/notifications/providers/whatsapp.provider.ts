@@ -21,7 +21,7 @@ export class WhatsappProvider {
         `[STUB] WhatsApp not sent (no WHATSAPP_PROVIDER configured). To: ${payload.to}, Template: ${payload.templateName}`,
       );
       this.logger.debug(`[STUB] Template params: ${JSON.stringify(payload.templateParams)}`);
-      return { success: true, providerRef: `stub-wa-${Date.now()}` };
+      return { success: false, error: 'No WhatsApp provider configured (WHATSAPP_PROVIDER missing)' };
     }
 
     // Future: plug in real Twilio/Clickatell SDK here

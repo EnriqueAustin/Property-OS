@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { BedDouble, TrendingUp, CalendarCheck, ClipboardList } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { api } from '../lib/api';
+import { formatCurrency, formatDate } from '../lib/format';
 
 interface Booking {
   id: string;
@@ -16,30 +17,55 @@ interface Booking {
   room: { name: string } | null;
 }
 
+interface DashboardStats {
+  totalBookings: number;
+  revenue: number;
+  todayCheckIns: number;
+  todayCheckOuts: number;
+  occupancyRate: number;
+}
+
 export default function DashboardPage() {
   const { user, property } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!property) return;
-    api.get<{ data: Booking[] }>(`/properties/${property.id}/bookings?limit=10`)
-      .then((res) => setBookings(res.data || []))
-      .catch(() => {})
+    setLoading(true);
+    setError('');
+    Promise.all([
+      api.get<{ data: Booking[]; meta: any }>(`/properties/${property.id}/bookings?limit=10`)
+        .then((res) => setBookings(res.data || [])),
+      api.get<any>(`/properties/${property.id}/dashboard`)
+        .then((s) => {
+          const kpis = s?.kpis || s;
+          setStats({
+            totalBookings: kpis.total_bookings ?? kpis.totalBookings ?? 0,
+            revenue: kpis.revenue_mtd ?? kpis.revenue ?? 0,
+            todayCheckIns: kpis.todays_checkins ?? kpis.todayCheckIns ?? 0,
+            todayCheckOuts: kpis.todays_checkouts ?? kpis.todayCheckOuts ?? 0,
+            occupancyRate: kpis.occupancy_rate ?? kpis.occupancyRate ?? 0,
+          });
+        })
+        .catch(() => null),
+    ])
+      .catch((err) => setError(err?.message || 'Failed to load dashboard data'))
       .finally(() => setLoading(false));
   }, [property]);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const confirmedBookings = bookings.filter((b) => b.status !== 'cancelled');
-  const todayCheckIns = bookings.filter((b) => b.check_in === today && b.status === 'confirmed');
-  const todayCheckOuts = bookings.filter((b) => b.check_out === today && b.status === 'checked_in');
-  const revenue = confirmedBookings.reduce((s, b) => s + Number(b.total_price), 0);
+  const todayCheckIns = stats?.todayCheckIns ?? 0;
+  const todayCheckOuts = stats?.todayCheckOuts ?? 0;
+  const totalBookings = stats?.totalBookings ?? bookings.filter((b) => !['cancelled', 'no_show'].includes(b.status)).length;
+  const revenue = stats?.revenue ?? bookings.filter((b) => !['cancelled', 'no_show'].includes(b.status)).reduce((s, b) => s + Number(b.total_price), 0);
 
   const KPI_CARDS = [
-    { label: 'Total Bookings', value: confirmedBookings.length, icon: ClipboardList, color: 'text-primary bg-primary/10' },
-    { label: 'Revenue', value: `R ${revenue.toLocaleString()}`, icon: TrendingUp, color: 'text-accent bg-accent/10' },
-    { label: "Today's Check-ins", value: todayCheckIns.length, icon: CalendarCheck, color: 'text-warning bg-warning/10' },
-    { label: "Today's Check-outs", value: todayCheckOuts.length, icon: BedDouble, color: 'text-danger bg-danger/10' },
+    { label: 'Total Bookings', value: totalBookings, icon: ClipboardList, color: 'text-primary bg-primary/10' },
+    { label: 'Revenue', value: formatCurrency(revenue), icon: TrendingUp, color: 'text-accent bg-accent/10' },
+    { label: "Today's Check-ins", value: todayCheckIns, icon: CalendarCheck, color: 'text-warning bg-warning/10' },
+    { label: "Today's Check-outs", value: todayCheckOuts, icon: BedDouble, color: 'text-danger bg-danger/10' },
   ];
 
   const statusBadge = (status: string) => {
@@ -103,8 +129,8 @@ export default function DashboardPage() {
                     <td className="px-5 py-3 font-mono text-xs">{b.reference_number}</td>
                     <td className="px-5 py-3">{b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : '—'}</td>
                     <td className="px-5 py-3">{b.room?.name || '—'}</td>
-                    <td className="px-5 py-3 whitespace-nowrap">{b.check_in} → {b.check_out}</td>
-                    <td className="px-5 py-3">R {Number(b.total_price).toLocaleString()}</td>
+                    <td className="px-5 py-3 whitespace-nowrap">{formatDate(b.check_in)} → {formatDate(b.check_out)}</td>
+                    <td className="px-5 py-3">{formatCurrency(Number(b.total_price))}</td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge(b.status)}`}>
                         {b.status.replace('_', ' ')}

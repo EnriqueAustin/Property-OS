@@ -39,6 +39,7 @@ export default function CalendarPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
 
   // Tooltip state
   const [tooltip, setTooltip] = useState<{ booking: Booking; x: number; y: number } | null>(null);
@@ -81,7 +82,10 @@ export default function CalendarPage() {
       setRooms(Array.isArray(roomsRes) ? roomsRes : (roomsRes.data || []));
       const bData = Array.isArray(bookingsRes) ? bookingsRes : (bookingsRes.data || []);
       setBookings(bData.filter((b: Booking) => b.status !== 'cancelled'));
-    } catch {}
+      setFetchError('');
+    } catch (err: any) {
+      setFetchError(err?.message || 'Failed to load calendar data');
+    }
     setLoading(false);
   }, [property, year, month, daysInMonth]);
 
@@ -115,6 +119,9 @@ export default function CalendarPage() {
       direct: 'bg-primary text-white',
       booking_com: 'bg-orange-500 text-white',
       airbnb: 'bg-rose-500 text-white',
+      expedia: 'bg-yellow-500 text-white',
+      lekkeslaap: 'bg-emerald-600 text-white',
+      safarinow: 'bg-amber-600 text-white',
       walk_in: 'bg-amber-500 text-white',
       phone: 'bg-violet-500 text-white',
       manual: 'bg-slate-500 text-white',
@@ -184,7 +191,9 @@ export default function CalendarPage() {
       setDrag(null);
       setBlockReason('maintenance');
       await fetchData();
-    } catch {}
+    } catch (err: any) {
+      setFetchError(err?.message || 'Failed to block dates');
+    }
     setBlocking(false);
   };
 
@@ -220,6 +229,7 @@ export default function CalendarPage() {
 
   return (
     <div className="max-w-full mx-auto" onMouseUp={handleMouseUp}>
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">Calendar</h2>
@@ -437,6 +447,9 @@ export default function CalendarPage() {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-primary" /> Direct</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-500" /> Booking.com</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-rose-500" /> Airbnb</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-500" /> Expedia</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-600" /> LekkeSlaap</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-600" /> SafariNow</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-500" /> Walk-in</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-violet-500" /> Phone</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-500" /> Manual</span>

@@ -14,6 +14,8 @@ import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { UpdateBookingSettingsDto } from './dto/booking-settings.dto';
 import { PropertyGuard } from '../../common/guards/property.guard';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { Permission } from '../../common/permissions/permissions.enum';
 
 @Controller('properties')
 export class PropertiesController {
@@ -31,6 +33,12 @@ export class PropertiesController {
     return this.propertiesService.listForUser(userId);
   }
 
+  @Get('portfolio/overview')
+  async portfolio(@Request() req) {
+    const userId = req.user?.userId ?? req.user?.sub;
+    return this.propertiesService.getPortfolioOverview(userId);
+  }
+
   @Get(':propertyId')
   @UseGuards(PropertyGuard)
   async findOne(
@@ -41,8 +49,19 @@ export class PropertiesController {
     return this.propertiesService.findOneForUser(userId, propertyId);
   }
 
+  @Get(':propertyId/my-permissions')
+  @UseGuards(PropertyGuard)
+  getMyPermissions(@Request() req) {
+    const pu = req.propertyUser;
+    return {
+      role: pu.role,
+      permissions: pu.getEffectivePermissions(),
+    };
+  }
+
   @Patch(':propertyId')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.SETTINGS_MANAGE)
   async update(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: UpdatePropertyDto,
@@ -60,6 +79,7 @@ export class PropertiesController {
 
   @Get(':propertyId/settings/booking')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.SETTINGS_VIEW)
   async getBookingSettings(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
   ) {
@@ -68,6 +88,7 @@ export class PropertiesController {
 
   @Patch(':propertyId/settings/booking')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.SETTINGS_MANAGE)
   async updateBookingSettings(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: UpdateBookingSettingsDto,

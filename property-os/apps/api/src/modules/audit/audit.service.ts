@@ -97,6 +97,26 @@ export class AuditService {
     });
   }
 
+  @OnEvent('booking.checked_in')
+  async onBookingCheckedIn(event: any) {
+    await this.log({
+      propertyId: event.propertyId,
+      action: 'check_in',
+      entityType: 'booking',
+      entityId: event.bookingId,
+    });
+  }
+
+  @OnEvent('booking.checked_out')
+  async onBookingCheckedOut(event: any) {
+    await this.log({
+      propertyId: event.propertyId,
+      action: 'check_out',
+      entityType: 'booking',
+      entityId: event.bookingId,
+    });
+  }
+
   @OnEvent('payment.completed')
   async onPaymentCompleted(event: any) {
     await this.log({

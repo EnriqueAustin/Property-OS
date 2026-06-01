@@ -15,6 +15,8 @@ import { Throttle } from '@nestjs/throttler';
 import { ChannelsService } from './channels.service';
 import { PropertyGuard } from '../../common/guards/property.guard';
 import { Public } from '../../common/decorators/public.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { Permission } from '../../common/permissions/permissions.enum';
 import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 import {
@@ -30,6 +32,7 @@ export class ChannelsController {
 
   @Post('properties/:propertyId/channels')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   create(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: CreateChannelDto,
@@ -40,12 +43,14 @@ export class ChannelsController {
 
   @Get('properties/:propertyId/channels')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_VIEW)
   list(@Param('propertyId', new ParseUUIDPipe()) propertyId: string) {
     return this.channels.listChannels(propertyId);
   }
 
   @Get('properties/:propertyId/channels/:channelId')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_VIEW)
   getOne(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
@@ -55,6 +60,7 @@ export class ChannelsController {
 
   @Patch('properties/:propertyId/channels/:channelId')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   update(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
@@ -65,6 +71,7 @@ export class ChannelsController {
 
   @Delete('properties/:propertyId/channels/:channelId')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   remove(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
@@ -76,6 +83,7 @@ export class ChannelsController {
 
   @Post('properties/:propertyId/channels/:channelId/mappings')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   addMapping(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
@@ -86,6 +94,7 @@ export class ChannelsController {
 
   @Patch('properties/:propertyId/channels/:channelId/mappings/:mappingId')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   updateMapping(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) _channelId: string,
@@ -97,6 +106,7 @@ export class ChannelsController {
 
   @Delete('properties/:propertyId/channels/:channelId/mappings/:mappingId')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   removeMapping(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) _channelId: string,
@@ -109,6 +119,7 @@ export class ChannelsController {
 
   @Post('properties/:propertyId/channels/:channelId/sync')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
   triggerSync(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
@@ -116,8 +127,19 @@ export class ChannelsController {
     return this.channels.syncICalImport(channelId);
   }
 
+  @Get('properties/:propertyId/channels/:channelId/test')
+  @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_VIEW)
+  testConnection(
+    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('channelId', new ParseUUIDPipe()) channelId: string,
+  ) {
+    return this.channels.testConnection(channelId);
+  }
+
   @Get('properties/:propertyId/channels/:channelId/logs')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_VIEW)
   getSyncLogs(
     @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
@@ -130,6 +152,7 @@ export class ChannelsController {
 
   @Get('properties/:propertyId/channels/reports/revenue')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.REPORTS_VIEW)
   revenueByChannel(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Query('from') from: string,
@@ -142,6 +165,7 @@ export class ChannelsController {
 
   @Get('properties/:propertyId/channels/reports/rate-parity')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.CHANNELS_VIEW)
   rateParity(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
   ) {

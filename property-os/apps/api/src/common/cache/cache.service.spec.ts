@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CacheService } from './cache.service';
-import { REDIS_CLIENT } from './cache.module';
+import { CacheService, REDIS_CLIENT } from './cache.service';
 
 const mockRedis = {
   connect: jest.fn().mockResolvedValue(undefined),

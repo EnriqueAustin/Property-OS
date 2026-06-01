@@ -1,9 +1,7 @@
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { CacheService } from './cache.service';
+import { CacheService, REDIS_CLIENT } from './cache.service';
 import Redis from 'ioredis';
-
-export const REDIS_CLIENT = 'REDIS_CLIENT';
 
 @Global()
 @Module({

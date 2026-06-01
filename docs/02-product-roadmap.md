@@ -227,23 +227,78 @@ This roadmap defines the phased evolution from MVP booking engine to full hospit
 | **Cross-property reporting** | Compare performance across properties |
 | **Centralized rate management** | Manage rates across all properties |
 
-### 4.3 Analytics & Intelligence
+### 4.3 Analytics & Intelligence — ON HOLD
 
-| Feature | Details |
-|---|---|
-| **Revenue management** | Dynamic pricing recommendations |
-| **Occupancy forecasting** | AI-powered demand prediction |
-| **Competitive rate intelligence** | Monitor competitor pricing |
-| **Custom reports** | Build and export custom reports |
+> **Status**: On hold until beta customers are active. AI features (forecasting, competitive intelligence) require LLM API token spend per property — only viable once there's paying usage to justify cost.
 
-### 4.4 Platform & Ecosystem
+| Feature | Details | Status |
+|---|---|---|
+| **Custom reports** | Build and export custom reports | ✅ Done — 7+ report types (occupancy, revenue, financial, tax, refund, outstanding, payment methods) |
+| **Revenue management** | Dynamic pricing recommendations | ⏸ On hold — smart alerts already give basic pricing suggestions |
+| **Occupancy forecasting** | AI-powered demand prediction | ⏸ On hold — needs beta usage data to train on |
+| **Competitive rate intelligence** | Monitor competitor pricing | ⏸ On hold — requires external scraping/API integrations |
 
-| Feature | Details |
-|---|---|
-| **API marketplace** | Public API for third-party integrations |
-| **App store** | Third-party extensions and plugins |
-| **Website builder** | Drag-and-drop hotel website with booking engine |
-| **Additional OTAs** | Expedia, Google Hotels, TripAdvisor |
+### 4.4 Platform & Ecosystem — ON HOLD
+
+> **Status**: On hold. These are platform-scale features for when PropertyOS has an established customer base.
+
+| Feature | Details | Status |
+|---|---|---|
+| **API marketplace** | Public API for third-party integrations | ⏸ On hold |
+| **App store** | Third-party extensions and plugins | ⏸ On hold |
+| **Website builder** | Drag-and-drop hotel website with booking engine | ⏸ On hold |
+| **Additional OTAs** | Expedia, Google Hotels, TripAdvisor | ⏸ On hold |
+
+---
+
+## Phase 5 — Production Readiness & Beta Launch
+
+> **Goal**: Get the platform stable, secure, and deployed for first beta customers.
+> **Tagline**: "Ship it"
+
+### 5.1 Deployment & Infrastructure
+
+| Feature | Priority | Details |
+|---|---|---|
+| **Database migrations** | P0 | Switch from `synchronize: true` to proper TypeORM migrations |
+| **Production deployment** | P0 | Deploy API + web to cloud (e.g. Railway, Fly.io, or VPS) |
+| **SSL + domain setup** | P0 | propertyos.co.za or similar, SSL certs |
+| **Environment config** | P0 | Production .env, secrets management |
+| **Backup strategy** | P0 | Automated PostgreSQL backups + point-in-time recovery |
+| **Logging & monitoring** | P1 | Structured logging, error tracking (Sentry), uptime monitoring |
+| **Rate limiting tuning** | P1 | Review and tune throttle limits for production load |
+
+### 5.2 Security & Hardening
+
+| Feature | Priority | Details |
+|---|---|---|
+| **Security audit** | P0 | Review auth flows, SQL injection, XSS, CSRF |
+| **Input sanitisation** | P0 | Validate all user inputs, escape HTML |
+| **POPIA compliance review** | P0 | Verify consent flows, data retention, erasure work correctly |
+| **Password policy** | P1 | Minimum strength requirements, bcrypt rounds |
+| **Session management** | P1 | Token expiry, refresh token rotation, device tracking |
+
+### 5.3 Beta Onboarding
+
+| Feature | Priority | Details |
+|---|---|---|
+| **Onboarding wizard polish** | P0 | Guided setup is smooth end-to-end |
+| **Demo/seed data** | P1 | One-click demo property with sample bookings |
+| **Help tooltips** | P1 | Contextual help across dashboard |
+| **Feedback mechanism** | P1 | In-app feedback button for beta testers |
+| **Email provider setup** | P0 | Real transactional email (SendGrid, Postmark, or SES) |
+| **WhatsApp provider setup** | P1 | Real WhatsApp Business API integration |
+
+### 5.4 Polish & UX
+
+| Feature | Priority | Details |
+|---|---|---|
+| **Loading states** | P1 | Skeleton loaders, optimistic updates |
+| **Empty states** | P1 | Helpful empty states across all pages |
+| **Error handling** | P0 | User-friendly error messages everywhere |
+| **Mobile UX audit** | P1 | Test and fix all pages on mobile |
+| **Performance** | P1 | Lazy loading, query optimisation, caching review |
+| **Accessibility** | P2 | Keyboard navigation, screen reader support |
 
 ---
 
@@ -267,6 +322,68 @@ Auth ──→ Property ──→ Rooms ──→ Availability ──→ Booking
                                                        ▼
                                               Full Platform (Phase 4)
 ```
+
+---
+
+## Phase 5 — Production Readiness (Completed 2026-05-30)
+
+> **Goal**: Security hardening, performance optimization, and infrastructure fixes to prepare for beta launch.
+
+### 5.1 Security Audit & Fixes
+
+| Fix | Severity | Details |
+|---|---|---|
+| **PayFast ITN IP validation** | Critical | Webhook now validates source IP against PayFast's known IPs before processing |
+| **PayFast signature ordering** | Critical | Parameters sorted alphabetically per PayFast spec for correct signature verification |
+| **Auth guards on all endpoints** | Critical | Guest, room type, room, and rate period CRUD now require PropertyGuard — no cross-property access |
+| **Path traversal in photo delete** | Critical | Filename validated and resolved path checked against uploads directory |
+| **Payment credentials masked** | High | PayFast merchant key and passphrase no longer returned in API responses |
+| **Public invoice secured** | High | Invoice lookup now requires email verification to prevent enumeration |
+| **Helmet security headers** | High | X-Content-Type-Options, X-Frame-Options, HSTS, etc. via helmet middleware |
+| **JWT secret production guard** | High | App refuses to start with default 'dev-secret' when NODE_ENV=production |
+| **Password reset validation** | Medium | ResetPasswordDto now enforces 8+ chars, uppercase, and digit requirements |
+| **Reports date validation** | Medium | Date parameters validated with regex + Date.parse before reaching SQL |
+| **CORS PUT method** | Medium | Added PUT to allowed CORS methods |
+| **Pricing occupancy rule** | Medium | Fixed inverted comparison — surcharge now applies when occupancy is HIGH |
+
+### 5.2 Performance & Scalability
+
+| Fix | Impact | Details |
+|---|---|---|
+| **Batch availability query** | High | Public availability check reduced from O(rooms × nights) queries to 1 query for blocked rooms + per-night pricing |
+| **DB connection pooling** | High | Configurable pool size (default 20, via DB_POOL_MAX env var) with idle/connection timeouts |
+| **Dashboard stats endpoint** | Medium | KPIs now use server-side stats instead of client-side calculation from 10 bookings |
+| **Booking ref generation** | Medium | Switched from COUNT(*) to MAX() to prevent duplicate refs under concurrent writes |
+
+### 5.3 Frontend Fixes
+
+| Fix | Severity | Details |
+|---|---|---|
+| **photoUrl() crash** | Critical | Fixed infinite recursion / invalid syntax in rooms and settings pages |
+| **Bookings page freeze** | Critical | Added Suspense boundary for useSearchParams() in Next.js 16 |
+| **API response unwrapping** | High | Channels page fixed — was double-unwrapping the response envelope |
+| **Browser dialogs replaced** | High | confirm() and prompt() replaced with styled modals for booking cancel and channel delete |
+| **Error handling** | High | Booking status updates, cancellation, and detail loading now show error feedback |
+| **SSR localStorage guard** | Medium | API client setToken() now checks for window before accessing localStorage |
+
+### 5.4 Infrastructure
+
+| Fix | Details |
+|---|---|
+| **Docker health checks** | PostgreSQL and Redis containers now have health checks with depends_on conditions |
+| **DB_SYNCHRONIZE default** | .env.example changed to false; seed.ts reads from env instead of hardcoding true |
+| **Audit events enriched** | BookingCreatedEvent and BookingCancelledEvent now include propertyId, referenceNumber, source |
+
+### Remaining for Production Deploy
+
+| Item | Priority | Notes |
+|---|---|---|
+| **TypeORM migrations** | P0 | Generate migration file, disable synchronize:true |
+| **Cluster mode / PM2** | P1 | Single config change at deploy time — not needed for dev |
+| **Real email provider** | P1 | Wire up Resend API key for transactional emails |
+| **Real WhatsApp provider** | P2 | Integrate WhatsApp Business API |
+| **CDN for uploads** | P2 | Move photo serving from Node to S3/Cloudflare R2 |
+| **OTA API credentials** | P2 | Plug in Airbnb/Booking.com API keys when partner approvals arrive |
 
 ---
 

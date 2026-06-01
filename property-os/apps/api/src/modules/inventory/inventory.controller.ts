@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { PropertyGuard } from '../../common/guards/property.guard';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { Permission } from '../../common/permissions/permissions.enum';
 import {
   CreateRoomTypeDto,
   UpdateRoomTypeDto,
@@ -33,6 +35,7 @@ export class InventoryController {
   // Room Types
   @Post('properties/:propertyId/room-types')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   createRoomType(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: CreateRoomTypeDto,
@@ -42,14 +45,18 @@ export class InventoryController {
 
   @Get('properties/:propertyId/room-types')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_VIEW)
   listRoomTypes(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
   ) {
     return this.inventory.listRoomTypes(propertyId);
   }
 
-  @Patch('room-types/:roomTypeId')
+  @Patch('properties/:propertyId/room-types/:roomTypeId')
+  @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   updateRoomType(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('roomTypeId', new ParseUUIDPipe()) roomTypeId: string,
     @Body() dto: UpdateRoomTypeDto,
   ) {
@@ -59,6 +66,7 @@ export class InventoryController {
   // Rooms
   @Post('properties/:propertyId/rooms')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   createRoom(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: CreateRoomDto,
@@ -68,12 +76,16 @@ export class InventoryController {
 
   @Get('properties/:propertyId/rooms')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_VIEW)
   listRooms(@Param('propertyId', new ParseUUIDPipe()) propertyId: string) {
     return this.inventory.listRooms(propertyId);
   }
 
-  @Patch('rooms/:roomId')
+  @Patch('properties/:propertyId/rooms/:roomId')
+  @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   updateRoom(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('roomId', new ParseUUIDPipe()) roomId: string,
     @Body() dto: UpdateRoomDto,
   ) {
@@ -83,6 +95,7 @@ export class InventoryController {
   // Availability
   @Get('properties/:propertyId/availability')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_VIEW)
   availability(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Query() q: AvailabilityQueryDto,
@@ -92,6 +105,7 @@ export class InventoryController {
 
   @Post('properties/:propertyId/availability/block')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   block(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: BlockDatesDto,
@@ -101,6 +115,7 @@ export class InventoryController {
 
   @Post('properties/:propertyId/availability/unblock')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   unblock(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: UnblockDatesDto,
@@ -110,6 +125,7 @@ export class InventoryController {
 
   @Post('properties/:propertyId/availability/bulk-update')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   bulkUpdate(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: BulkAvailabilityUpdateDto,
@@ -120,6 +136,7 @@ export class InventoryController {
   // Rate Periods
   @Post('properties/:propertyId/rate-periods')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   createRatePeriod(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Body() dto: CreateRatePeriodDto,
@@ -129,23 +146,30 @@ export class InventoryController {
 
   @Get('properties/:propertyId/rate-periods')
   @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_VIEW)
   listRatePeriods(
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
   ) {
     return this.inventory.listRatePeriods(propertyId);
   }
 
-  @Patch('rate-periods/:ratePeriodId')
+  @Patch('properties/:propertyId/rate-periods/:ratePeriodId')
+  @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   updateRatePeriod(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('ratePeriodId', new ParseUUIDPipe()) ratePeriodId: string,
     @Body() dto: UpdateRatePeriodDto,
   ) {
     return this.inventory.updateRatePeriod(ratePeriodId, dto);
   }
 
-  @Delete('rate-periods/:ratePeriodId')
+  @Delete('properties/:propertyId/rate-periods/:ratePeriodId')
+  @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   @HttpCode(204)
   deleteRatePeriod(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('ratePeriodId', new ParseUUIDPipe()) ratePeriodId: string,
   ) {
     return this.inventory.deleteRatePeriod(ratePeriodId);

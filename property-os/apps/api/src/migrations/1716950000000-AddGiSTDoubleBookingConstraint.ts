@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddGiSTDoubleBookingConstraint1716825600000
+export class AddGiSTDoubleBookingConstraint1716950000000
   implements MigrationInterface
 {
   public async up(queryRunner: QueryRunner): Promise<void> {

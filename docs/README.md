@@ -16,6 +16,7 @@
 | [08 — Go-to-Market (South Africa)](./08-go-to-market-sa.md) | Launch strategy, pricing, first customers | Business |
 | [09 — Integrations Playbook](./09-integrations-playbook.md) | OTA, payment, messaging integration details | Engineering |
 | [10 — Tech Stack & Infrastructure](./10-tech-stack-infrastructure.md) | Stack decisions, deployment, DevOps | Engineering |
+| [11 — Competitive Gap Analysis](./11-competitive-gap-analysis.md) | Feature gaps vs NightsBridge/Little Hotelier + build plan | Product, Engineering |
 
 ## 🏗️ Build Phases
 
@@ -24,7 +25,12 @@ Phase 1 (0–3 months)  → Booking Engine + PMS-Lite        → "Get properties
 Phase 2 (3–9 months)  → Channel Manager                  → "NightsBridge competitor"
 Phase 3 (9–18 months) → Automation + Payments             → "Full operational layer"
 Phase 4 (18–36 months)→ Full Platform                     → "Cloudbeds competitor"
+Phase 5 (DONE)        → Security + Scalability            → "Production ready"
 ```
+
+### Current Status (2026-05-30)
+Phases 1-5 complete. ~70% of roadmap built, ~60% feature parity with NightsBridge.
+See [11 — Competitive Gap Analysis](./11-competitive-gap-analysis.md) for the detailed build plan to reach competitor parity.
 
 ## 🧭 How to Use These Docs
 

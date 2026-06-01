@@ -22,8 +22,9 @@ import { UpdatePaymentSettingsDto } from './dto/payment-settings.dto';
 import {
   buildPayfastRedirectUrl,
   verifyPayfastSignature,
+  isValidPayfastHost,
 } from './utils/payfast.util';
-import { PAYMENT_EVENTS, PaymentCompletedEvent } from './events/payment.events';
+import { PAYMENT_EVENTS, PaymentCompletedEvent, PaymentFailedEvent } from './events/payment.events';
 
 @Injectable()
 export class PaymentsService {
@@ -98,10 +99,75 @@ export class PaymentsService {
     };
   }
 
+  // -- SnapScan via PayFast: initiate ------------------------------------------
+
+  async initiateSnapscan(propertyId: string, dto: InitiatePayfastPaymentDto) {
+    const booking = await this.getBookingForProperty(dto.bookingId, propertyId);
+    const settings = await this.getSettings(propertyId);
+
+    if (!settings.payfast_enabled || !settings.snapscan_enabled) {
+      throw new BadRequestException('SnapScan is not enabled for this property');
+    }
+
+    const amount = dto.amount ?? this.calcAmount(booking, dto.paymentType);
+
+    const payment = this.paymentsRepo.create({
+      booking_id: booking.id,
+      property_id: propertyId,
+      amount,
+      currency: booking.currency,
+      payment_type: dto.paymentType,
+      status: PaymentStatus.PENDING,
+      provider: PaymentProvider.PAYFAST,
+      provider_data: { payment_method: 'snapscan' },
+    });
+    const saved = await this.paymentsRepo.save(payment);
+
+    const baseUrl = this.config.get<string>('APP_URL') || 'http://localhost:3000';
+    const apiUrl = this.config.get<string>('API_URL') || 'http://localhost:3001';
+
+    const { url, signature } = buildPayfastRedirectUrl(
+      {
+        merchant_id: settings.payfast_merchant_id!,
+        merchant_key: settings.payfast_merchant_key!,
+        return_url: `${baseUrl}/bookings/${booking.reference_number}/payment-complete`,
+        cancel_url: `${baseUrl}/bookings/${booking.reference_number}/payment-cancelled`,
+        notify_url: `${apiUrl}/payments/payfast/itn`,
+        name_first: booking.guest?.first_name || 'Guest',
+        name_last: booking.guest?.last_name || '',
+        email_address: booking.guest?.email || '',
+        m_payment_id: saved.id,
+        amount: amount.toFixed(2),
+        item_name: `Booking ${booking.reference_number}`,
+        item_description: `${dto.paymentType} for ${booking.nights} night(s)`,
+        payment_method: 'sc',
+      } as any,
+      settings.payfast_passphrase,
+      settings.payfast_sandbox,
+    );
+
+    saved.provider_data = { ...saved.provider_data, signature };
+    await this.paymentsRepo.save(saved);
+
+    return {
+      paymentId: saved.id,
+      redirectUrl: url,
+      amount,
+      paymentMethod: 'snapscan',
+      sandbox: settings.payfast_sandbox,
+    };
+  }
+
   // -- PayFast ITN webhook (Instant Transaction Notification) -----------------
 
   async handlePayfastItn(body: Record<string, string>, sourceIp: string) {
     this.logger.log(`PayFast ITN received from ${sourceIp}`);
+
+    const sandbox = this.config.get<string>('PAYFAST_SANDBOX') === 'true';
+    if (!sandbox && !isValidPayfastHost(sourceIp)) {
+      this.logger.warn(`ITN rejected: invalid source IP ${sourceIp}`);
+      return;
+    }
 
     const paymentId = body.m_payment_id;
     if (!paymentId) {
@@ -147,6 +213,10 @@ export class PaymentsService {
     } else if (payfastStatus === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
       payment.failed_at = new Date();
+      this.eventEmitter.emit(
+        PAYMENT_EVENTS.FAILED,
+        new PaymentFailedEvent(payment.booking_id, Number(payment.amount), 'PayFast payment failed'),
+      );
     } else {
       payment.status = PaymentStatus.PROCESSING;
     }
@@ -329,6 +399,16 @@ export class PaymentsService {
     return settings;
   }
 
+  async getSettingsSafe(propertyId: string) {
+    const settings = await this.getSettings(propertyId);
+    const mask = (val: string | null) => val ? `****${val.slice(-4)}` : null;
+    return {
+      ...settings,
+      payfast_merchant_key: mask(settings.payfast_merchant_key),
+      payfast_passphrase: settings.payfast_passphrase ? '********' : null,
+    };
+  }
+
   async updateSettings(propertyId: string, dto: UpdatePaymentSettingsDto) {
     let settings = await this.getSettings(propertyId);
 
@@ -337,6 +417,7 @@ export class PaymentsService {
     if (dto.payfastPassphrase !== undefined) settings.payfast_passphrase = dto.payfastPassphrase;
     if (dto.payfastSandbox !== undefined) settings.payfast_sandbox = dto.payfastSandbox;
     if (dto.payfastEnabled !== undefined) settings.payfast_enabled = dto.payfastEnabled;
+    if (dto.snapscanEnabled !== undefined) settings.snapscan_enabled = dto.snapscanEnabled;
     if (dto.eftEnabled !== undefined) settings.eft_enabled = dto.eftEnabled;
     if (dto.eftBankName !== undefined) settings.eft_bank_name = dto.eftBankName;
     if (dto.eftAccountHolder !== undefined) settings.eft_account_holder = dto.eftAccountHolder;
@@ -345,6 +426,85 @@ export class PaymentsService {
     if (dto.eftAccountType !== undefined) settings.eft_account_type = dto.eftAccountType;
 
     return this.settingsRepo.save(settings);
+  }
+
+  // -- Balance collection (charge remaining before arrival) --------------------
+
+  async getOutstandingBalances(propertyId: string) {
+    const bookings = await this.bookingsRepo
+      .createQueryBuilder('b')
+      .where('b.property_id = :propertyId', { propertyId })
+      .andWhere('b.status IN (:...statuses)', {
+        statuses: ['confirmed', 'pending', 'checked_in'],
+      })
+      .getMany();
+
+    const results: Array<{
+      bookingId: string;
+      referenceNumber: string;
+      guestId: string;
+      checkIn: string;
+      totalPrice: number;
+      totalPaid: number;
+      totalRefunded: number;
+      balance: number;
+      currency: string;
+      balanceDueDate: string;
+      daysUntilCheckIn: number;
+    }> = [];
+    for (const booking of bookings) {
+      const payments = await this.paymentsRepo.find({
+        where: { booking_id: booking.id, property_id: propertyId },
+      });
+
+      const totalPaid = payments
+        .filter((p) => p.status === PaymentStatus.COMPLETED && p.payment_type !== PaymentType.REFUND)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const totalRefunded = payments
+        .filter((p) => p.payment_type === PaymentType.REFUND && p.status === PaymentStatus.COMPLETED)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const balance = Number(booking.total_price) - totalPaid + totalRefunded;
+
+      if (balance > 0) {
+        results.push({
+          bookingId: booking.id,
+          referenceNumber: booking.reference_number,
+          guestId: booking.guest_id,
+          checkIn: booking.check_in,
+          totalPrice: Number(booking.total_price),
+          totalPaid,
+          totalRefunded,
+          balance,
+          currency: booking.currency,
+          balanceDueDate: booking.balance_due_date,
+          daysUntilCheckIn: Math.ceil(
+            (new Date(booking.check_in).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+          ),
+        });
+      }
+    }
+
+    return results.sort((a, b) => a.daysUntilCheckIn - b.daysUntilCheckIn);
+  }
+
+  async generatePaymentLink(propertyId: string, bookingId: string) {
+    const summary = await this.getBookingPaymentSummary(bookingId, propertyId);
+    if (summary.fullyPaid) {
+      throw new BadRequestException('Booking is already fully paid');
+    }
+
+    const baseUrl = this.config.get<string>('APP_URL') || 'http://localhost:3000';
+    const booking = await this.getBookingForProperty(bookingId, propertyId);
+
+    return {
+      bookingId,
+      referenceNumber: booking.reference_number,
+      balance: summary.balance,
+      currency: booking.currency,
+      paymentUrl: `${baseUrl}/pay/${booking.reference_number}`,
+    };
   }
 
   // -- Helpers ----------------------------------------------------------------

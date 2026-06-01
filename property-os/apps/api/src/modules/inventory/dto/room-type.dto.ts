@@ -59,6 +59,26 @@ export class CreateRoomTypeDto {
   is_active?: boolean;
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  base_occupancy?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  single_occupancy_rate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  extra_person_rate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  child_rate?: number;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
   @ValidateNested({ each: true })

@@ -10,6 +10,10 @@ import {
 } from 'typeorm';
 import { Property } from './property.entity';
 import { User } from '../../users/entities/user.entity';
+import {
+  Permission,
+  DEFAULT_PERMISSIONS,
+} from '../../../common/permissions/permissions.enum';
 
 export enum PropertyUserRole {
   OWNER = 'owner',
@@ -34,6 +38,9 @@ export class PropertyUser {
   @Column({ type: 'varchar', length: 20, default: PropertyUserRole.STAFF })
   role: PropertyUserRole;
 
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  permissions: Permission[];
+
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
 
@@ -47,4 +54,16 @@ export class PropertyUser {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  hasPermission(permission: Permission): boolean {
+    if (this.role === PropertyUserRole.OWNER) return true;
+    return Array.isArray(this.permissions) && this.permissions.includes(permission);
+  }
+
+  getEffectivePermissions(): Permission[] {
+    if (this.role === PropertyUserRole.OWNER) {
+      return [...DEFAULT_PERMISSIONS.owner];
+    }
+    return Array.isArray(this.permissions) ? this.permissions : [];
+  }
 }

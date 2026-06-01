@@ -27,6 +27,8 @@ export enum BookingSource {
   BOOKING_COM = 'booking_com',
   AIRBNB = 'airbnb',
   EXPEDIA = 'expedia',
+  LEKKESLAAP = 'lekkeslaap',
+  SAFARINOW = 'safarinow',
   WALK_IN = 'walk_in',
   PHONE = 'phone',
   MANUAL = 'manual',
@@ -42,6 +44,7 @@ export enum BookingSource {
 @Index('idx_bookings_source', ['property_id', 'source'])
 @Index('idx_bookings_checkin', ['check_in'])
 @Index('idx_bookings_checkout', ['check_out'])
+@Index('idx_bookings_group', ['group_id'])
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -54,6 +57,12 @@ export class Booking {
 
   @Column({ type: 'uuid' })
   guest_id: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  group_id: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  group_index: number;
 
   @Column({ type: 'varchar', length: 30, unique: true })
   reference_number: string;
@@ -75,6 +84,12 @@ export class Booking {
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   nightly_rate: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  deposit_amount: number;
+
+  @Column({ type: 'date', nullable: true })
+  balance_due_date: string;
 
   @Column({
     type: 'varchar',
@@ -107,6 +122,30 @@ export class Booking {
 
   @Column({ type: 'text', nullable: true })
   cancellation_reason: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  expected_arrival_time: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  vehicle_registration: string;
+
+  @Column({ type: 'int', nullable: true })
+  num_vehicles: number;
+
+  @Column({ type: 'text', nullable: true })
+  dietary_requirements: string;
+
+  @Column({ type: 'boolean', default: false })
+  online_check_in_completed: boolean;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  online_check_in_at: Date;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  promo_code: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  discount_amount: number;
 
   @Column({
     type: 'timestamp with time zone',

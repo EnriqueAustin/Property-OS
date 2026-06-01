@@ -37,6 +37,9 @@ interface RoomType {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 const UPLOADS_URL = API_BASE.replace('/api', '/uploads');
+function photoUrl(photo: string) {
+  return photo.startsWith('http') ? photo : `${UPLOADS_URL}/${photo}`;
+}
 
 const emptyRoomTypeForm = {
   name: '',
@@ -226,7 +229,7 @@ export default function RoomsPage() {
 
     try {
       if (editingTypeId) {
-        await api.patch(`/room-types/${editingTypeId}`, payload);
+        await api.patch(`/properties/${property!.id}/room-types/${editingTypeId}`, payload);
         persistMessage('Room type updated.');
       } else {
         await api.post(`/properties/${property.id}/room-types`, payload);
@@ -259,7 +262,7 @@ export default function RoomsPage() {
 
     try {
       if (editingRoomId) {
-        await api.patch(`/rooms/${editingRoomId}`, payload);
+        await api.patch(`/properties/${property!.id}/rooms/${editingRoomId}`, payload);
         persistMessage('Room updated.');
       } else {
         await api.post(`/properties/${property.id}/rooms`, payload);
@@ -330,7 +333,7 @@ export default function RoomsPage() {
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-3">
                           {(roomType.photos || []).length > 0 ? (
-                            <img src={`${UPLOADS_URL}/${roomType.photos[0]}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                            <img src={photoUrl(roomType.photos[0]!)} alt="" className="w-10 h-10 rounded-lg object-cover" />
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                               <BedDouble size={20} />
@@ -581,7 +584,7 @@ export default function RoomsPage() {
                   <div className="flex flex-wrap gap-3 mb-3">
                     {editingTypePhotos.map((photo) => (
                       <div key={photo} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border">
-                        <img src={`${UPLOADS_URL}/${photo}`} alt="" className="w-full h-full object-cover" />
+                        <img src={photoUrl(photo)} alt="" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => deleteRoomTypePhoto(photo)}

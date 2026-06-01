@@ -27,7 +27,7 @@ export class EmailProvider {
         `[STUB] Email not sent (no RESEND_API_KEY configured). To: ${payload.to}, Subject: ${payload.subject}`,
       );
       this.logger.debug(`[STUB] Email body:\n${payload.html}`);
-      return { success: true, providerRef: `stub-${Date.now()}` };
+      return { success: false, error: 'No email provider configured (RESEND_API_KEY missing)' };
     }
 
     const from = payload.from || this.config.get<string>('EMAIL_FROM') || 'PropertyOS <noreply@propertyos.co.za>';

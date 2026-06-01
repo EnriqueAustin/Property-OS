@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Plus, Search, ChevronLeft, ChevronRight, X, Save } from 'lucide-react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Plus, Search, ChevronLeft, ChevronRight, X, Save, CreditCard, FileText, Send, Download, Mail } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { api } from '../../lib/api';
+import { formatCurrency, formatDate } from '../../lib/format';
 
 interface Booking {
   id: string;
@@ -33,7 +35,7 @@ interface RoomOption {
 }
 
 const STATUS_OPTIONS = ['', 'pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'];
-const SOURCE_OPTIONS = ['', 'direct', 'booking_com', 'airbnb', 'walk_in', 'phone', 'manual'];
+const SOURCE_OPTIONS = ['', 'direct', 'booking_com', 'airbnb', 'expedia', 'lekkeslaap', 'safarinow', 'walk_in', 'phone', 'manual'];
 
 const emptyForm = {
   roomId: '',
@@ -46,8 +48,9 @@ const emptyForm = {
   guest: { firstName: '', lastName: '', email: '', phone: '', country: '' },
 };
 
-export default function BookingsPage() {
+function BookingsPageInner() {
   const { property } = useAuth();
+  const searchParams = useSearchParams();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [meta, setMeta] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -58,11 +61,21 @@ export default function BookingsPage() {
   const [selected, setSelected] = useState<BookingDetail | null>(null);
   const [showPanel, setShowPanel] = useState(false);
 
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(searchParams.get('new') === '1');
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ amount: 0, paymentType: 'full', provider: 'cash', notes: '' });
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [invoiceResult, setInvoiceResult] = useState<{ invoiceNumber: string } | null>(null);
+  const [invoiceEmailSent, setInvoiceEmailSent] = useState(false);
 
   const fetchBookings = () => {
     if (!property) return;
@@ -130,25 +143,89 @@ export default function BookingsPage() {
   };
 
   const openDetail = async (id: string) => {
-    const b = await api.get<BookingDetail>(`/properties/${property!.id}/bookings/${id}`);
-    setSelected(b);
-    setShowPanel(true);
+    setDetailLoading(true);
+    setActionError('');
+    try {
+      const b = await api.get<BookingDetail>(`/properties/${property!.id}/bookings/${id}`);
+      setSelected(b);
+      setShowPanel(true);
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to load booking details');
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const updateStatus = async (bookingId: string, newStatus: string) => {
-    await api.patch(`/properties/${property!.id}/bookings/${bookingId}/status`, { status: newStatus });
-    fetchBookings();
-    if (selected?.id === bookingId) {
-      const b = await api.get<BookingDetail>(`/properties/${property!.id}/bookings/${bookingId}`);
-      setSelected(b);
+    setActionError('');
+    try {
+      await api.patch(`/properties/${property!.id}/bookings/${bookingId}/status`, { status: newStatus });
+      fetchBookings();
+      if (selected?.id === bookingId) {
+        const b = await api.get<BookingDetail>(`/properties/${property!.id}/bookings/${bookingId}`);
+        setSelected(b);
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to update booking status');
     }
   };
 
   const cancelBooking = async (bookingId: string) => {
-    const reason = prompt('Cancellation reason (optional):');
-    await api.post(`/properties/${property!.id}/bookings/${bookingId}/cancel`, { reason: reason || undefined });
-    fetchBookings();
-    setShowPanel(false);
+    setActionError('');
+    try {
+      await api.post(`/properties/${property!.id}/bookings/${bookingId}/cancel`, { reason: cancelReason || undefined });
+      fetchBookings();
+      setShowPanel(false);
+      setShowCancelModal(null);
+      setCancelReason('');
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to cancel booking');
+    }
+  };
+
+  const recordPayment = async () => {
+    if (!property || !selected) return;
+    setRecordingPayment(true);
+    setActionError('');
+    try {
+      await api.post(`/properties/${property.id}/payments/manual`, {
+        bookingId: selected.id,
+        amount: paymentForm.amount,
+        paymentType: paymentForm.paymentType,
+        provider: paymentForm.provider,
+        notes: paymentForm.notes || undefined,
+      });
+      setShowPaymentModal(false);
+      setPaymentForm({ amount: 0, paymentType: 'full', provider: 'cash', notes: '' });
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to record payment');
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
+
+  const generateInvoice = async () => {
+    if (!property || !selected) return;
+    setGeneratingInvoice(true);
+    setActionError('');
+    try {
+      const result = await api.post<{ invoiceNumber: string }>(`/properties/${property.id}/bookings/${selected.id}/invoice`, {});
+      setInvoiceResult(result as any);
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to generate invoice');
+    } finally {
+      setGeneratingInvoice(false);
+    }
+  };
+
+  const sendPaymentLink = async () => {
+    if (!property || !selected) return;
+    setActionError('');
+    try {
+      await api.post(`/properties/${property.id}/bookings/${selected.id}/payment-link`, {});
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to send payment link');
+    }
   };
 
   const statusBadge = (s: string) => {
@@ -226,8 +303,8 @@ export default function BookingsPage() {
                   <td className="px-5 py-3 font-mono text-xs">{b.reference_number}</td>
                   <td className="px-5 py-3">{b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : '—'}</td>
                   <td className="px-5 py-3">{b.room?.name || '—'}</td>
-                  <td className="px-5 py-3 whitespace-nowrap">{b.check_in} → {b.check_out}</td>
-                  <td className="px-5 py-3">R {Number(b.total_price).toLocaleString()}</td>
+                  <td className="px-5 py-3 whitespace-nowrap">{formatDate(b.check_in)} → {formatDate(b.check_out)}</td>
+                  <td className="px-5 py-3">{formatCurrency(Number(b.total_price))}</td>
                   <td className="px-5 py-3 capitalize">{b.source.replace('_', ' ')}</td>
                   <td className="px-5 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusBadge(b.status)}`}>
@@ -328,6 +405,9 @@ export default function BookingsPage() {
                       <option value="direct">Direct</option>
                       <option value="booking_com">Booking.com</option>
                       <option value="airbnb">Airbnb</option>
+                      <option value="expedia">Expedia</option>
+                      <option value="lekkeslaap">LekkeSlaap</option>
+                      <option value="safarinow">SafariNow</option>
                     </select>
                   </div>
                   <div>
@@ -474,11 +554,11 @@ export default function BookingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted mb-1">Check-in</p>
-                    <p>{selected.check_in}</p>
+                    <p>{formatDate(selected.check_in)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted mb-1">Check-out</p>
-                    <p>{selected.check_out}</p>
+                    <p>{formatDate(selected.check_out)}</p>
                   </div>
                 </div>
 
@@ -489,13 +569,13 @@ export default function BookingsPage() {
                   </div>
                   <div>
                     <p className="text-sm text-muted mb-1">Total</p>
-                    <p className="font-bold">{selected.currency} {Number(selected.total_price).toLocaleString()}</p>
+                    <p className="font-bold">{formatCurrency(Number(selected.total_price), selected.currency)}</p>
                   </div>
                 </div>
 
                 <div>
                   <p className="text-sm text-muted mb-1">Nightly Rate</p>
-                  <p>{selected.currency} {Number(selected.nightly_rate).toLocaleString()}/night</p>
+                  <p>{formatCurrency(Number(selected.nightly_rate), selected.currency)}/night</p>
                 </div>
 
                 <div>
@@ -536,15 +616,182 @@ export default function BookingsPage() {
                   </button>
                 )}
                 {['pending', 'confirmed'].includes(selected.status) && (
-                  <button onClick={() => cancelBooking(selected.id)} className="px-4 py-2 bg-danger/10 text-danger rounded-lg text-sm font-medium hover:bg-danger/20">
+                  <button onClick={() => setShowCancelModal(selected.id)} className="px-4 py-2 bg-danger/10 text-danger rounded-lg text-sm font-medium hover:bg-danger/20">
                     Cancel
                   </button>
                 )}
               </div>
+
+              {/* Payment & Invoice Actions */}
+              {!['cancelled', 'no_show'].includes(selected.status) && (
+                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
+                  <button
+                    onClick={() => { setPaymentForm({ ...paymentForm, amount: Number(selected.total_price) }); setShowPaymentModal(true); }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent/10 text-accent rounded-lg text-sm font-medium hover:bg-accent/20"
+                  >
+                    <CreditCard size={14} /> Record Payment
+                  </button>
+                  <button
+                    onClick={generateInvoice}
+                    disabled={generatingInvoice}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary/10 text-primary rounded-lg text-sm font-medium hover:bg-primary/20 disabled:opacity-50"
+                  >
+                    <FileText size={14} /> {generatingInvoice ? 'Generating...' : 'Generate Invoice'}
+                  </button>
+                  <button
+                    onClick={sendPaymentLink}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-warning/10 text-warning rounded-lg text-sm font-medium hover:bg-warning/20"
+                  >
+                    <Send size={14} /> Payment Link
+                  </button>
+                </div>
+              )}
+
+              {invoiceResult && (
+                <div className="mt-3 p-3 rounded-lg bg-accent/10 text-accent text-sm">
+                  Invoice generated: <span className="font-mono font-bold">{invoiceResult.invoiceNumber}</span>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => {
+                        if (!property || !selected) return;
+                        window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/properties/${property.id}/bookings/${selected.id}/invoice`, '_blank');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-border rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Download size={12} /> Download PDF
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!property || !selected) return;
+                        setActionError('');
+                        try {
+                          await api.post(`/properties/${property.id}/bookings/${selected.id}/invoice/send`, {});
+                          setInvoiceEmailSent(true);
+                        } catch (err: any) {
+                          setActionError(err.message || 'Failed to send invoice email');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-border rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Mail size={12} /> {invoiceEmailSent ? 'Email Sent!' : 'Email to Guest'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {actionError && <div className="mt-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{actionError}</div>}
             </div>
           </div>
         </>
       )}
+      {/* Cancel Booking Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowCancelModal(null)} />
+          <div className="relative w-full max-w-sm bg-white rounded-xl shadow-xl border border-border p-5">
+            <h3 className="font-semibold text-lg mb-3">Cancel Booking</h3>
+            <p className="text-sm text-muted mb-4">Are you sure you want to cancel this booking? This action cannot be undone.</p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Reason (optional)</label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                placeholder="Enter cancellation reason..."
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowCancelModal(null); setCancelReason(''); }}
+                className="px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Keep Booking
+              </button>
+              <button
+                onClick={() => cancelBooking(showCancelModal)}
+                className="px-4 py-2 bg-danger text-white rounded-lg text-sm font-medium hover:bg-danger/90"
+              >
+                Cancel Booking
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Record Payment Modal */}
+      {showPaymentModal && selected && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowPaymentModal(false)} />
+          <div className="relative w-full max-w-sm bg-white rounded-xl shadow-xl border border-border p-5">
+            <h3 className="font-semibold text-lg mb-1">Record Payment</h3>
+            <p className="text-sm text-muted mb-4">For booking {selected.reference_number}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Amount (ZAR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={paymentForm.amount || ''}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) })}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Payment Type</label>
+                <select value={paymentForm.paymentType} onChange={(e) => setPaymentForm({ ...paymentForm, paymentType: e.target.value })} className={inputClass}>
+                  <option value="deposit">Deposit</option>
+                  <option value="full">Full Payment</option>
+                  <option value="balance">Balance</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Method</label>
+                <select value={paymentForm.provider} onChange={(e) => setPaymentForm({ ...paymentForm, provider: e.target.value })} className={inputClass}>
+                  <option value="cash">Cash</option>
+                  <option value="card_manual">Card (manual)</option>
+                  <option value="eft">EFT / Bank Transfer</option>
+                  <option value="payfast">PayFast</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                <input
+                  value={paymentForm.notes}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                  className={inputClass}
+                  placeholder="e.g. Receipt #1234"
+                />
+              </div>
+            </div>
+            {actionError && <div className="mt-3 p-3 rounded-lg bg-danger/10 text-danger text-sm">{actionError}</div>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={recordPayment}
+                disabled={recordingPayment || !paymentForm.amount}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                <CreditCard size={14} />
+                {recordingPayment ? 'Recording...' : 'Record Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function BookingsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-muted">Loading...</div>}>
+      <BookingsPageInner />
+    </Suspense>
   );
 }

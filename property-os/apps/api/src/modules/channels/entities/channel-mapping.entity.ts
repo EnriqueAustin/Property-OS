@@ -32,7 +32,7 @@ export class ChannelMapping {
   @Column({ type: 'varchar', length: 255, nullable: true })
   external_room_id: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   rate_override: number;
 
   @Column({ type: 'boolean', default: true })

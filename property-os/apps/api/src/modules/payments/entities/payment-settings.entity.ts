@@ -33,6 +33,9 @@ export class PaymentSettings {
   payfast_enabled: boolean;
 
   @Column({ type: 'boolean', default: false })
+  snapscan_enabled: boolean;
+
+  @Column({ type: 'boolean', default: false })
   eft_enabled: boolean;
 
   @Column({ type: 'varchar', length: 100, nullable: true })

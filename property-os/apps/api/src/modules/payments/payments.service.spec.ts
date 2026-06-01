@@ -53,7 +53,10 @@ const mockRepo = () => ({
 });
 
 const mockEventEmitter = { emit: jest.fn() };
-const mockConfigService = { get: jest.fn().mockReturnValue('http://localhost:3000') };
+const mockConfigService = { get: jest.fn((key: string) => {
+  if (key === 'PAYFAST_SANDBOX') return 'true';
+  return 'http://localhost:3000';
+}) };
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
@@ -165,6 +168,7 @@ describe('PaymentsService', () => {
 
       const paramString = Object.entries(itnBody)
         .filter(([, v]) => v)
+        .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
         .join('&');
       const crypto = require('crypto');
@@ -265,7 +269,7 @@ describe('PayFast Utilities', () => {
         amount: '100.00',
       };
       const crypto = require('crypto');
-      const paramString = 'merchant_id=test-merchant&amount=100.00';
+      const paramString = 'amount=100.00&merchant_id=test-merchant';
       const sig = crypto.createHash('md5')
         .update(`${paramString}&passphrase=${encodeURIComponent('secret')}`)
         .digest('hex');

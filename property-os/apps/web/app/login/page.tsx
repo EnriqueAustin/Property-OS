@@ -1,25 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../lib/auth-context';
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionExpired = searchParams.get('expired') === '1';
+  const returnTo = searchParams.get('returnTo');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       await login(email, password);
-      router.push('/dashboard');
+      router.push(returnTo || '/dashboard');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     }
@@ -33,6 +37,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-primary">Property OS</h1>
           <p className="text-sm text-muted mt-1">Sign in to your account</p>
         </div>
+
+        {sessionExpired && (
+          <div className="p-3 rounded-lg bg-warning/10 text-warning text-sm mb-4 text-center">
+            Your session has expired. Please sign in again.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-border shadow-sm p-6 space-y-4">
           {error && (
@@ -94,5 +104,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

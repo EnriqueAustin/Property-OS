@@ -60,6 +60,7 @@ export function verifyPayfastSignature(
 
   const paramString = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v).trim())}`)
     .join('&');
 

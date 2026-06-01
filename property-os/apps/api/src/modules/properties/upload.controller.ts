@@ -19,6 +19,8 @@ import { Repository } from 'typeorm';
 import { Property } from './entities/property.entity';
 import { RoomType } from '../inventory/entities/room-type.entity';
 import { PropertyGuard } from '../../common/guards/property.guard';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { Permission } from '../../common/permissions/permissions.enum';
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads');
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -52,6 +54,7 @@ export class UploadController {
   ) {}
 
   @Post('photos')
+  @RequirePermission(Permission.SETTINGS_MANAGE)
   @UseInterceptors(FilesInterceptor('files', 10, { storage, fileFilter, limits: { fileSize: MAX_FILE_SIZE } }))
   async uploadPropertyPhotos(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
@@ -68,21 +71,32 @@ export class UploadController {
   }
 
   @Delete('photos/:filename')
+  @RequirePermission(Permission.SETTINGS_MANAGE)
   async deletePropertyPhoto(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('filename') filename: string,
   ) {
+    if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+      throw new BadRequestException('Invalid filename');
+    }
+
     const property = await this.propertiesRepo.findOneByOrFail({ id: propertyId });
     property.photos = (property.photos || []).filter((p) => p !== filename);
     await this.propertiesRepo.save(property);
 
     const filePath = join(UPLOADS_DIR, filename);
+    const resolvedPath = require('path').resolve(filePath);
+    const resolvedUploads = require('path').resolve(UPLOADS_DIR);
+    if (!resolvedPath.startsWith(resolvedUploads)) {
+      throw new BadRequestException('Invalid filename');
+    }
     if (existsSync(filePath)) unlinkSync(filePath);
 
     return { photos: property.photos };
   }
 
   @Post('room-types/:rtId/photos')
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   @UseInterceptors(FilesInterceptor('files', 10, { storage, fileFilter, limits: { fileSize: MAX_FILE_SIZE } }))
   async uploadRoomTypePhotos(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
@@ -100,6 +114,7 @@ export class UploadController {
   }
 
   @Delete('room-types/:rtId/photos/:filename')
+  @RequirePermission(Permission.INVENTORY_MANAGE)
   async deleteRoomTypePhoto(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('rtId', ParseUUIDPipe) rtId: string,

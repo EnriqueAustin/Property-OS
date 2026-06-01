@@ -42,6 +42,18 @@ export class RatePeriod {
   @Column({ type: 'int', nullable: true })
   min_stay: number;
 
+  @Column({ type: 'int', nullable: true })
+  max_stay: number;
+
+  @Column({ type: 'boolean', default: false })
+  closed_to_arrival: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  closed_to_departure: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  stop_sell: boolean;
+
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
 

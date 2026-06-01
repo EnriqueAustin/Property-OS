@@ -15,12 +15,17 @@ import { GoogleStrategy } from './strategies/google.strategy';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') ?? 'dev-secret',
+      useFactory: async (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET') ?? 'dev-secret';
+        if (secret === 'dev-secret' && process.env.NODE_ENV === 'production') {
+          throw new Error('JWT_SECRET must be set in production');
+        }
+        return {
+        secret,
         signOptions: {
           expiresIn: (configService.get<string>('JWT_EXPIRY') ?? '15m') as any,
         },
-      }),
+      }; },
       inject: [ConfigService],
     }),
   ],

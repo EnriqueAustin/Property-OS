@@ -1,4 +1,4 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -23,6 +23,8 @@ export class ResetPasswordDto {
   token: string;
 
   @IsString()
-  @IsString()
+  @MinLength(8)
+  @Matches(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
+  @Matches(/\d/, { message: 'Password must contain at least one digit' })
   newPassword: string;
 }

@@ -348,6 +348,56 @@ export class InventoryService {
     await this.ratePeriodRepo.remove(rp);
   }
 
+  async getYieldRestrictions(
+    roomTypeId: string,
+    propertyId: string,
+    checkIn: string,
+    checkOut: string,
+  ): Promise<{
+    minStay: number | null;
+    maxStay: number | null;
+    closedToArrival: boolean;
+    closedToDeparture: boolean;
+    stopSell: boolean;
+  }> {
+    const periods = await this.ratePeriodRepo
+      .createQueryBuilder('rp')
+      .where('rp.property_id = :propertyId', { propertyId })
+      .andWhere('rp.is_active = true')
+      .andWhere('rp.start_date <= :checkIn AND rp.end_date >= :checkIn', { checkIn })
+      .andWhere('(rp.room_type_id = :roomTypeId OR rp.room_type_id IS NULL)', { roomTypeId })
+      .orderBy('rp.room_type_id', 'DESC', 'NULLS LAST')
+      .getMany();
+
+    let minStay: number | null = null;
+    let maxStay: number | null = null;
+    let closedToArrival = false;
+    let closedToDeparture = false;
+    let stopSell = false;
+
+    for (const p of periods) {
+      if (p.min_stay != null && (minStay == null || p.min_stay > minStay)) minStay = p.min_stay;
+      if (p.max_stay != null && (maxStay == null || p.max_stay < maxStay)) maxStay = p.max_stay;
+      if (p.closed_to_arrival) closedToArrival = true;
+      if (p.closed_to_departure) closedToDeparture = true;
+      if (p.stop_sell) stopSell = true;
+    }
+
+    const checkOutPeriods = await this.ratePeriodRepo
+      .createQueryBuilder('rp')
+      .where('rp.property_id = :propertyId', { propertyId })
+      .andWhere('rp.is_active = true')
+      .andWhere('rp.start_date <= :checkOut AND rp.end_date >= :checkOut', { checkOut })
+      .andWhere('(rp.room_type_id = :roomTypeId OR rp.room_type_id IS NULL)', { roomTypeId })
+      .getMany();
+
+    for (const p of checkOutPeriods) {
+      if (p.closed_to_departure) closedToDeparture = true;
+    }
+
+    return { minStay, maxStay, closedToArrival, closedToDeparture, stopSell };
+  }
+
   async getEffectivePrice(roomTypeId: string, propertyId: string, date: string): Promise<number> {
     const rt = await this.roomTypesRepo.findOne({ where: { id: roomTypeId } });
     if (!rt) throw new NotFoundException('Room type not found');
@@ -372,6 +422,32 @@ export class InventoryService {
       return Math.round(basePrice * (1 + Number(ratePeriod.price_modifier) / 100) * 100) / 100;
     }
     return basePrice;
+  }
+
+  async getDerivedPrice(
+    roomTypeId: string,
+    basePrice: number,
+    guestCount: number,
+  ): Promise<{ price: number; derivation: string | null }> {
+    const rt = await this.roomTypesRepo.findOne({ where: { id: roomTypeId } });
+    if (!rt) return { price: basePrice, derivation: null };
+
+    const baseOccupancy = rt.base_occupancy || 2;
+
+    if (guestCount === 1 && rt.single_occupancy_rate != null) {
+      return { price: Number(rt.single_occupancy_rate), derivation: 'single_occupancy' };
+    }
+
+    if (guestCount > baseOccupancy && rt.extra_person_rate != null) {
+      const extraGuests = guestCount - baseOccupancy;
+      const surcharge = extraGuests * Number(rt.extra_person_rate);
+      return {
+        price: Math.round((basePrice + surcharge) * 100) / 100,
+        derivation: 'extra_person',
+      };
+    }
+
+    return { price: basePrice, derivation: null };
   }
 
   private async assertRoomBelongs(roomId: string, propertyId: string) {

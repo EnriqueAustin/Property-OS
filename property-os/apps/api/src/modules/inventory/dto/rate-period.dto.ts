@@ -38,6 +38,23 @@ export class CreateRatePeriodDto {
   min_stay?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  max_stay?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  closed_to_arrival?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  closed_to_departure?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  stop_sell?: boolean;
+
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
 }
@@ -72,6 +89,23 @@ export class UpdateRatePeriodDto {
   @IsInt()
   @Min(1)
   min_stay?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  max_stay?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  closed_to_arrival?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  closed_to_departure?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  stop_sell?: boolean;
 
   @IsOptional()
   @IsBoolean()

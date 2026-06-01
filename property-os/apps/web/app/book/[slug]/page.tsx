@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Calendar, MapPin, Clock, Users, ChevronRight, Check, Wifi, Wind, Loader2, Download, Printer, ExternalLink } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, ChevronRight, ChevronLeft, Check, Wifi, Wind, Loader2, Download, Printer, ExternalLink, BedDouble } from 'lucide-react';
+import { formatTime, formatCurrency, formatDate } from '../../lib/format';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -30,6 +31,7 @@ interface AvailableRoom {
   roomTypeName: string;
   description: string;
   amenities: string[];
+  photos: string[];
   nightlyRate: number;
   totalPrice: number;
   availableCount: number;
@@ -70,6 +72,15 @@ export default function BookingPage() {
     phone: '',
     specialRequests: '',
   });
+
+  // Promo code
+  const [promoCode, setPromoCode] = useState('');
+  const [promoValid, setPromoValid] = useState<boolean | null>(null);
+  const [promoMessage, setPromoMessage] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState<{ type: string; value: number } | null>(null);
+
+  // Photo carousel
+  const [photoIndices, setPhotoIndices] = useState<Record<string, number>>({});
 
   // Booking result
   const [bookingResult, setBookingResult] = useState<any>(null);
@@ -135,6 +146,7 @@ export default function BookingPage() {
             phone: guestForm.phone,
           },
           specialRequests: guestForm.specialRequests || undefined,
+          promoCode: promoCode || undefined,
         }),
       });
       if (!res.ok) {
@@ -267,10 +279,10 @@ export default function BookingPage() {
 
             <div className="flex items-center gap-4 text-sm text-muted mb-6">
               <span className="flex items-center gap-1">
-                <Clock size={14} /> Check-in: {property.checkInTime}
+                <Clock size={14} /> Check-in: {formatTime(property.checkInTime)}
               </span>
               <span className="flex items-center gap-1">
-                <Clock size={14} /> Check-out: {property.checkOutTime}
+                <Clock size={14} /> Check-out: {formatTime(property.checkOutTime)}
               </span>
             </div>
 
@@ -296,7 +308,7 @@ export default function BookingPage() {
             </button>
 
             <div className="bg-slate-100 rounded-lg px-4 py-2 mb-4 text-sm flex items-center gap-4">
-              <span>{availability.checkIn} &rarr; {availability.checkOut}</span>
+              <span>{formatDate(availability.checkIn)} &rarr; {formatDate(availability.checkOut)}</span>
               <span>{availability.nights} night{availability.nights > 1 ? 's' : ''}</span>
               <span>{guests} guest{guests > 1 ? 's' : ''}</span>
             </div>
@@ -307,41 +319,86 @@ export default function BookingPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {availability.availableRooms.map((room) => (
-                  <div key={room.roomTypeId} className="bg-white rounded-xl border border-border p-5 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold">{room.roomTypeName}</h3>
-                        {room.description && (
-                          <p className="text-sm text-muted mt-1">{room.description}</p>
-                        )}
-                        <div className="flex items-center gap-1 mt-2 text-sm text-muted">
-                          <Users size={14} /> Max {room.maxOccupancy} guests
+                {availability.availableRooms.map((room) => {
+                  const currentPhoto = photoIndices[room.roomTypeId] || 0;
+                  return (
+                    <div key={room.roomTypeId} className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                      {/* Photo carousel */}
+                      {room.photos && room.photos.length > 0 ? (
+                        <div className="relative w-full h-48 bg-slate-100">
+                          <img
+                            src={room.photos[currentPhoto]}
+                            alt={room.roomTypeName}
+                            className="w-full h-48 object-cover"
+                          />
+                          {room.photos.length > 1 && (
+                            <>
+                              <button
+                                onClick={() => setPhotoIndices((prev) => ({
+                                  ...prev,
+                                  [room.roomTypeId]: (currentPhoto - 1 + room.photos.length) % room.photos.length,
+                                }))}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow"
+                              >
+                                <ChevronLeft size={18} />
+                              </button>
+                              <button
+                                onClick={() => setPhotoIndices((prev) => ({
+                                  ...prev,
+                                  [room.roomTypeId]: (currentPhoto + 1) % room.photos.length,
+                                }))}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow"
+                              >
+                                <ChevronRight size={18} />
+                              </button>
+                              <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">
+                                {currentPhoto + 1}/{room.photos.length}
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {room.amenities.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {room.amenities.map((a) => (
-                              <span key={a} className="inline-flex items-center gap-1 text-xs bg-slate-100 px-2 py-1 rounded">
-                                <Check size={12} className="text-accent" /> {a}
-                              </span>
-                            ))}
+                      ) : (
+                        <div className="w-full h-48 bg-slate-100 flex items-center justify-center">
+                          <BedDouble size={48} className="text-slate-300" />
+                        </div>
+                      )}
+
+                      <div className="p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold">{room.roomTypeName}</h3>
+                            {room.description && (
+                              <p className="text-sm text-muted mt-1">{room.description}</p>
+                            )}
+                            <div className="flex items-center gap-1 mt-2 text-sm text-muted">
+                              <Users size={14} /> Max {room.maxOccupancy} guests
+                            </div>
+                            {room.amenities.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {room.amenities.map((a) => (
+                                  <span key={a} className="inline-flex items-center gap-1 text-xs bg-slate-100 px-2 py-1 rounded">
+                                    <Check size={12} className="text-accent" /> {a}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <div className="text-right sm:min-w-[150px]">
-                        <p className="text-sm text-muted">R {room.nightlyRate.toLocaleString()} / night</p>
-                        <p className="text-xl font-bold mt-1">R {room.totalPrice.toLocaleString()}</p>
-                        <p className="text-xs text-muted mb-3">total for {availability.nights} night{availability.nights > 1 ? 's' : ''}</p>
-                        <button
-                          onClick={() => selectRoom(room)}
-                          className="w-full bg-primary text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-dark text-sm"
-                        >
-                          Select
-                        </button>
+                          <div className="text-right sm:min-w-[150px]">
+                            <p className="text-sm text-muted">{formatCurrency(room.nightlyRate)} / night</p>
+                            <p className="text-xl font-bold mt-1">{formatCurrency(room.totalPrice)}</p>
+                            <p className="text-xs text-muted mb-3">total for {availability.nights} night{availability.nights > 1 ? 's' : ''}</p>
+                            <button
+                              onClick={() => selectRoom(room)}
+                              className="w-full bg-primary text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-dark text-sm"
+                            >
+                              Select
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -358,9 +415,9 @@ export default function BookingPage() {
             <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 mb-6 text-sm">
               <p className="font-medium">{selectedRoom.roomTypeName}</p>
               <p className="text-muted">
-                {availability.checkIn} &rarr; {availability.checkOut} &middot; {availability.nights} night{availability.nights > 1 ? 's' : ''}
+                {formatDate(availability.checkIn)} &rarr; {formatDate(availability.checkOut)} &middot; {availability.nights} night{availability.nights > 1 ? 's' : ''}
               </p>
-              <p className="font-bold mt-1">Total: R {selectedRoom.totalPrice.toLocaleString()}</p>
+              <p className="font-bold mt-1">Total: {formatCurrency(selectedRoom.totalPrice)}</p>
             </div>
 
             <div className="bg-white rounded-xl border border-border p-6 shadow-sm">
@@ -424,6 +481,52 @@ export default function BookingPage() {
                 />
               </div>
 
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-1">Promo Code (optional)</label>
+                <div className="flex gap-2">
+                  <input
+                    value={promoCode}
+                    onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoValid(null); setPromoMessage(''); }}
+                    placeholder="e.g. SUMMER25"
+                    className="flex-1 px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!promoCode) return;
+                      try {
+                        const res = await fetch(`${API_URL}/public/promo-codes/validate`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            propertySlug: slug,
+                            code: promoCode,
+                            nights: availability?.nights,
+                            totalAmount: selectedRoom?.totalPrice,
+                          }),
+                        });
+                        const json = await res.json();
+                        const data = json.data ?? json;
+                        setPromoValid(data.valid);
+                        setPromoMessage(data.valid ? `${data.discountType === 'percentage' ? data.discountValue + '%' : 'R' + data.discountValue} discount applied!` : data.reason || 'Invalid code');
+                        if (data.valid) setPromoDiscount({ type: data.discountType, value: data.discountValue });
+                      } catch {
+                        setPromoValid(false);
+                        setPromoMessage('Could not validate code');
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-slate-50"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {promoMessage && (
+                  <p className={`text-xs mt-1 ${promoValid ? 'text-green-600' : 'text-red-500'}`}>
+                    {promoMessage}
+                  </p>
+                )}
+              </div>
+
               <button
                 onClick={submitBooking}
                 disabled={!guestForm.firstName || !guestForm.lastName || !guestForm.email || !guestForm.phone || submitting}
@@ -432,7 +535,7 @@ export default function BookingPage() {
                 {submitting ? (
                   <><Loader2 size={18} className="animate-spin" /> Booking...</>
                 ) : (
-                  `Confirm Booking - R ${selectedRoom.totalPrice.toLocaleString()}`
+                  `Confirm Booking - ${formatCurrency(selectedRoom.totalPrice)}`
                 )}
               </button>
             </div>
@@ -461,11 +564,11 @@ export default function BookingPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Check-in</span>
-                <span className="font-medium">{checkIn}</span>
+                <span className="font-medium">{formatDate(checkIn)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Check-out</span>
-                <span className="font-medium">{checkOut}</span>
+                <span className="font-medium">{formatDate(checkOut)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Nights</span>
@@ -477,7 +580,7 @@ export default function BookingPage() {
               </div>
               <div className="flex justify-between border-t border-border pt-2 mt-2">
                 <span className="text-muted">Total</span>
-                <span className="font-bold">R {Number(bookingResult.total_price).toLocaleString()}</span>
+                <span className="font-bold">{formatCurrency(Number(bookingResult.total_price))}</span>
               </div>
             </div>
 
@@ -539,8 +642,25 @@ export default function BookingPage() {
               </button>
             </div>
 
+            {bookingResult.depositRequired && (
+              <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-left max-w-sm mx-auto print:hidden">
+                <p className="text-sm font-medium text-amber-800 mb-2">
+                  Deposit Required: {formatCurrency(bookingResult.depositAmount)}
+                </p>
+                <p className="text-xs text-amber-700 mb-3">
+                  Please pay your deposit to secure this booking.
+                </p>
+                <a
+                  href={`/pay/${bookingResult.reference_number}`}
+                  className="block w-full text-center py-2 px-4 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700"
+                >
+                  Pay Deposit
+                </a>
+              </div>
+            )}
+
             <p className="text-sm text-muted mt-6 print:mt-4">
-              A confirmation email has been sent to <strong>{guestForm.email}</strong>
+              A confirmation email will be sent to <strong>{guestForm.email}</strong> shortly. If you don&apos;t receive it within a few minutes, please contact the property directly.
             </p>
           </div>
         )}

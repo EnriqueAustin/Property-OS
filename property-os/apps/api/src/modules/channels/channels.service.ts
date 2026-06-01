@@ -29,6 +29,8 @@ const CHANNEL_TO_SOURCE: Record<ChannelType, BookingSource> = {
   [ChannelType.BOOKING_COM]: BookingSource.BOOKING_COM,
   [ChannelType.AIRBNB]: BookingSource.AIRBNB,
   [ChannelType.EXPEDIA]: BookingSource.EXPEDIA,
+  [ChannelType.LEKKESLAAP]: BookingSource.LEKKESLAAP,
+  [ChannelType.SAFARINOW]: BookingSource.SAFARINOW,
   [ChannelType.ICAL]: BookingSource.MANUAL,
 };
 
@@ -611,19 +613,27 @@ export class ChannelsService {
     return parity;
   }
 
-  // --- Bulk availability push -----------------------------------------------
+  // --- Connection test -------------------------------------------------------
 
-  async pushAvailabilityToChannels(propertyId: string): Promise<void> {
-    const channels = await this.channelsRepo.find({
-      where: { property_id: propertyId, status: ChannelStatus.ACTIVE },
-    });
+  async testConnection(channelId: string): Promise<{ connected: boolean; message: string }> {
+    const channel = await this.getChannel(channelId);
 
-    for (const channel of channels) {
-      if (channel.ical_import_url) {
-        this.logger.log(
-          `Would push availability to ${channel.name} (${channel.type}) — API integration pending`,
-        );
+    if (channel.ical_import_url) {
+      try {
+        const res = await fetch(channel.ical_import_url, { method: 'HEAD' });
+        if (res.ok) {
+          return { connected: true, message: 'iCal feed is reachable' };
+        }
+        return { connected: false, message: `HTTP ${res.status}: ${res.statusText}` };
+      } catch (err: any) {
+        return { connected: false, message: err.message };
       }
     }
+
+    if (Object.keys(channel.credentials).length > 0) {
+      return { connected: true, message: 'API credentials configured (pending activation)' };
+    }
+
+    return { connected: false, message: 'No import URL or API credentials configured' };
   }
 }

@@ -6,6 +6,7 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token;
+    if (typeof window === 'undefined') return;
     if (token) {
       localStorage.setItem('pos_token', token);
     } else {
@@ -69,18 +70,20 @@ class ApiClient {
       } catch {
         this.setToken(null);
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?expired=1&returnTo=${returnTo}`;
         }
-        throw new Error('Unauthorized');
+        throw new Error('Session expired — please sign in again');
       }
     }
 
     if (res.status === 401) {
       this.setToken(null);
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/login?expired=1&returnTo=${returnTo}`;
       }
-      throw new Error('Unauthorized');
+      throw new Error('Session expired — please sign in again');
     }
 
     if (!res.ok) {
@@ -109,6 +112,10 @@ class ApiClient {
 
   patch<T>(path: string, body?: unknown) {
     return this.request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined });
+  }
+
+  put<T>(path: string, body?: unknown) {
+    return this.request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined });
   }
 
   delete<T>(path: string) {

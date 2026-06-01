@@ -4,6 +4,8 @@ export class InitialSchema1716900000000 implements MigrationInterface {
   name = 'InitialSchema1716900000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+
     await queryRunner.query(`
       DO $$ BEGIN
         CREATE TYPE "user_role_enum" AS ENUM ('owner', 'manager', 'staff');
@@ -14,7 +16,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── users ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "users" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "email" varchar(255) NOT NULL,
         "password_hash" varchar(255),
         "google_id" varchar(255),
@@ -39,7 +41,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── properties ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "properties" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "name" varchar(255) NOT NULL,
         "slug" varchar(255) NOT NULL,
         "description" text,
@@ -84,7 +86,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── property_users ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "property_users" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "user_id" uuid NOT NULL,
         "role" varchar(20) NOT NULL DEFAULT 'staff',
@@ -103,7 +105,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── room_types ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "room_types" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "name" varchar(100) NOT NULL,
         "description" text,
@@ -126,7 +128,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── room_amenities ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "room_amenities" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "room_type_id" uuid NOT NULL,
         "amenity" varchar(100) NOT NULL,
         "icon" varchar(50),
@@ -141,7 +143,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── rooms ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "rooms" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "room_type_id" uuid NOT NULL,
         "name" varchar(100) NOT NULL,
@@ -163,7 +165,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── room_availability ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "room_availability" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "room_id" uuid NOT NULL,
         "date" date NOT NULL,
         "status" varchar(20) NOT NULL DEFAULT 'available',
@@ -186,7 +188,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── rate_periods ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "rate_periods" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "room_type_id" uuid,
         "name" varchar(100) NOT NULL,
@@ -209,7 +211,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── guests ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "guests" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "first_name" varchar(100) NOT NULL,
         "last_name" varchar(100) NOT NULL,
@@ -236,7 +238,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── bookings ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "bookings" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "room_id" uuid NOT NULL,
         "guest_id" uuid NOT NULL,
@@ -279,7 +281,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── payments ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "payments" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "booking_id" uuid NOT NULL,
         "property_id" uuid NOT NULL,
         "amount" numeric(10,2) NOT NULL,
@@ -312,7 +314,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── payment_settings ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "payment_settings" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "payfast_merchant_id" varchar(100),
         "payfast_merchant_key" varchar(100),
@@ -336,7 +338,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── notifications ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "notifications" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "booking_id" uuid,
         "channel" varchar(20) NOT NULL,
@@ -365,7 +367,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── notification_settings ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "notification_settings" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "email_booking_confirmation" boolean NOT NULL DEFAULT true,
         "email_cancellation" boolean NOT NULL DEFAULT true,
@@ -392,7 +394,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── audit_log ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "audit_log" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid,
         "user_id" uuid,
         "action" varchar(50) NOT NULL,
@@ -413,7 +415,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── channels ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "channels" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "property_id" uuid NOT NULL,
         "type" varchar(30) NOT NULL,
         "name" varchar(100) NOT NULL,
@@ -442,7 +444,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── channel_mappings ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "channel_mappings" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "channel_id" uuid NOT NULL,
         "room_type_id" uuid NOT NULL,
         "external_listing_id" varchar(255),
@@ -466,7 +468,7 @@ export class InitialSchema1716900000000 implements MigrationInterface {
     // ── sync_logs ──
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "sync_logs" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_in(),
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "channel_id" uuid NOT NULL,
         "direction" varchar(10) NOT NULL,
         "status" varchar(10) NOT NULL,

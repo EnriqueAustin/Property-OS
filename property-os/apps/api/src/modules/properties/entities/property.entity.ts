@@ -104,6 +104,24 @@ export class Property {
   @Column({ type: 'varchar', length: 500, nullable: true })
   cover_image_url: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  google_analytics_id: string;
+
+  @Column({ type: 'text', nullable: true })
+  wifi_name: string;
+
+  @Column({ type: 'text', nullable: true })
+  wifi_password: string;
+
+  @Column({ type: 'text', nullable: true })
+  house_rules: string;
+
+  @Column({ type: 'text', nullable: true })
+  local_tips: string;
+
+  @Column({ type: 'text', nullable: true })
+  emergency_contact: string;
+
   @Column({ type: 'jsonb', default: '[]' })
   photos: string[];
 

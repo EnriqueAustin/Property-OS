@@ -59,15 +59,27 @@ describe('GuestsService', () => {
   describe('listGuests', () => {
     it('should return paginated guests', async () => {
       const qb = {
+        leftJoin: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[mockGuest], 1]),
+        groupBy: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawAndEntities: jest.fn().mockResolvedValue({
+          entities: [mockGuest],
+          raw: [{ booking_count: '3', total_spent: '12000' }],
+        }),
       };
-      mockGuestsRepo.createQueryBuilder.mockReturnValue(qb);
+      const countQb = {
+        where: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(1),
+      };
+      mockGuestsRepo.createQueryBuilder
+        .mockReturnValueOnce(qb)
+        .mockReturnValueOnce(countQb);
 
       const result = await service.listGuests('prop-1', { page: 1, limit: 20 });
 
@@ -77,39 +89,58 @@ describe('GuestsService', () => {
     });
 
     it('should apply search filter', async () => {
-      const qb = {
+      const mainQb = {
+        leftJoin: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        groupBy: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
       };
-      mockGuestsRepo.createQueryBuilder.mockReturnValue(qb);
+      const countQb = {
+        where: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      mockGuestsRepo.createQueryBuilder
+        .mockReturnValueOnce(mainQb)
+        .mockReturnValueOnce(countQb);
 
       await service.listGuests('prop-1', { search: 'sarah', page: 1, limit: 20 });
 
-      expect(qb.andWhere).toHaveBeenCalledWith(
+      expect(mainQb.andWhere).toHaveBeenCalledWith(
         expect.stringContaining('ILIKE'),
         { s: '%sarah%' },
       );
     });
 
     it('should cap limit at 100', async () => {
-      const qb = {
+      const mainQb = {
+        leftJoin: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        groupBy: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
       };
-      mockGuestsRepo.createQueryBuilder.mockReturnValue(qb);
+      const countQb = {
+        where: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      mockGuestsRepo.createQueryBuilder
+        .mockReturnValueOnce(mainQb)
+        .mockReturnValueOnce(countQb);
 
       await service.listGuests('prop-1', { page: 1, limit: 500 });
 
-      expect(qb.take).toHaveBeenCalledWith(100);
+      expect(mainQb.limit).toHaveBeenCalledWith(100);
     });
   });
 

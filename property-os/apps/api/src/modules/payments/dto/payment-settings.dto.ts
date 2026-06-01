@@ -23,6 +23,10 @@ export class UpdatePaymentSettingsDto {
 
   @IsOptional()
   @IsBoolean()
+  snapscanEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   eftEnabled?: boolean;
 
   @IsOptional()

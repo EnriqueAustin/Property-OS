@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #2563EB;
   --color-primary-dark: #1d4ed8;
@@ -7,12 +9,107 @@
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
   --color-surface: #ffffff;
-  --color-surface-dark: #1E293B;
+  --color-surface-dark: #111827;
   --color-bg: #F8FAFC;
   --color-bg-dark: #0F172A;
   --color-border: #E2E8F0;
   --color-muted: #64748B;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-surface: #111827;
+  --color-bg: #0F172A;
+  --color-border: #243244;
+  --color-muted: #94A3B8;
+}
+
+body {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+@layer utilities {
+  .dark .bg-white {
+    background-color: #111827;
+  }
+
+  .dark .bg-bg,
+  .dark .bg-slate-50 {
+    background-color: #0F172A;
+  }
+
+  .dark .bg-slate-100 {
+    background-color: #1E293B;
+  }
+
+  .dark .bg-slate-200 {
+    background-color: #334155;
+  }
+
+  .dark .hover\:bg-slate-50:hover {
+    background-color: #1E293B;
+  }
+
+  .dark .hover\:bg-slate-100:hover,
+  .dark .hover\:bg-slate-200:hover {
+    background-color: #334155;
+  }
+
+  .dark .bg-blue-50\/50 {
+    background-color: rgb(30 64 175 / 0.14);
+  }
+
+  .dark .border-border,
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    border-color: #243244;
+  }
+
+  .dark .border-blue-100 {
+    border-color: rgb(59 130 246 / 0.25);
+  }
+
+  .dark .text-slate-900,
+  .dark .text-slate-800,
+  .dark .text-slate-700 {
+    color: #F8FAFC;
+  }
+
+  .dark .text-slate-600,
+  .dark .text-slate-500,
+  .dark .text-muted {
+    color: #94A3B8;
+  }
+
+  .dark .text-slate-400,
+  .dark .text-slate-300 {
+    color: #CBD5E1;
+  }
+
+  .dark .shadow-sm,
+  .dark .shadow-md,
+  .dark .shadow-lg,
+  .dark .shadow-xl {
+    box-shadow: 0 16px 40px rgb(0 0 0 / 0.35);
+  }
+
+  .dark input,
+  .dark textarea,
+  .dark select {
+    background-color: #0B1220;
+    color: #F8FAFC;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #64748B;
+  }
 }
 
 @media print {

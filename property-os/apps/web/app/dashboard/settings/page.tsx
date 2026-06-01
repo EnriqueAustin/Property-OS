@@ -7,10 +7,21 @@ import { api } from '../../lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 const UPLOADS_URL = API_BASE.replace('/api', '/uploads');
+function photoUrl(photo: string) {
+  return photo.startsWith('http') ? photo : `${UPLOADS_URL}/${photo}`;
+}
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 const WIDGET_URL = process.env.NEXT_PUBLIC_WIDGET_URL || 'https://cdn.propertyos.co.za/widget.iife.js';
 
-type SettingsTab = 'property' | 'payments' | 'photos' | 'widget' | 'notifications';
+type SettingsTab = 'property' | 'payments' | 'photos' | 'widget' | 'notifications' | 'templates';
+
+interface EmailTemplateRecord {
+  id: string;
+  template_type: string;
+  subject: string;
+  body_html: string;
+  is_active: boolean;
+}
 
 export default function SettingsPage() {
   const { property } = useAuth();
@@ -21,6 +32,10 @@ export default function SettingsPage() {
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
+  const [templates, setTemplates] = useState<EmailTemplateRecord[]>([]);
+  const [templateVars, setTemplateVars] = useState<Record<string, string[]>>({});
+  const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
+  const [templateForm, setTemplateForm] = useState({ subject: '', bodyHtml: '' });
 
   // Notification settings
   const [notifSettings, setNotifSettings] = useState({
@@ -46,6 +61,12 @@ export default function SettingsPage() {
     check_in_time: '14:00', check_out_time: '10:00',
     min_stay_nights: 1, deposit_required: false, deposit_percentage: 0,
     cancellation_policy: '',
+    google_analytics_id: '',
+    wifi_name: '',
+    wifi_password: '',
+    house_rules: '',
+    local_tips: '',
+    emergency_contact: '',
   });
 
   // Payment settings
@@ -69,6 +90,12 @@ export default function SettingsPage() {
           deposit_required: p.deposit_required || false,
           deposit_percentage: p.deposit_percentage || 0,
           cancellation_policy: p.cancellation_policy || '',
+          google_analytics_id: p.google_analytics_id || '',
+          wifi_name: p.wifi_name || '',
+          wifi_password: p.wifi_password || '',
+          house_rules: p.house_rules || '',
+          local_tips: p.local_tips || '',
+          emergency_contact: p.emergency_contact || '',
         });
         setPhotos(p.photos || []);
       })
@@ -107,6 +134,14 @@ export default function SettingsPage() {
         wifi_password: s.wifi_password || '',
         directions: s.directions || '',
       }))
+      .catch(() => {});
+
+    api.get<EmailTemplateRecord[]>(`/properties/${property.id}/email-templates`)
+      .then((t) => setTemplates(Array.isArray(t) ? t : []))
+      .catch(() => {});
+
+    api.get<Record<string, string[]>>(`/properties/${property.id}/email-templates/variables`)
+      .then((v) => setTemplateVars(v || {}))
       .catch(() => {});
   }, [property]);
 
@@ -211,6 +246,7 @@ export default function SettingsPage() {
           ['photos', 'Photos'],
           ['widget', 'Booking Widget'],
           ['notifications', 'Notifications'],
+          ['templates', 'Email Templates'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition whitespace-nowrap ${tab === key ? 'bg-white shadow-sm' : 'text-muted'}`}>
             {label}
@@ -263,6 +299,43 @@ export default function SettingsPage() {
             <label className={labelClass}>Cancellation Policy</label>
             <textarea value={propForm.cancellation_policy} onChange={(e) => setPropForm({ ...propForm, cancellation_policy: e.target.value })} rows={2} className={inputClass} />
           </div>
+
+          <div className="border-t border-border pt-6 mt-6">
+            <h4 className="text-sm font-semibold text-slate-800 mb-3">Google Analytics</h4>
+            <div>
+              <label className={labelClass}>GA Measurement ID</label>
+              <input value={propForm.google_analytics_id} onChange={(e) => setPropForm({ ...propForm, google_analytics_id: e.target.value })} placeholder="G-XXXXXXXXXX" className={inputClass} />
+              <p className="text-xs text-muted mt-1">Track booking conversions on your public booking page.</p>
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-6 mt-6">
+            <h4 className="text-sm font-semibold text-slate-800 mb-3">Digital Guestbook</h4>
+            <p className="text-xs text-muted mb-3">This info is shown to guests via the guestbook QR code.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>WiFi Name</label>
+                <input value={propForm.wifi_name} onChange={(e) => setPropForm({ ...propForm, wifi_name: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>WiFi Password</label>
+                <input value={propForm.wifi_password} onChange={(e) => setPropForm({ ...propForm, wifi_password: e.target.value })} className={inputClass} />
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className={labelClass}>House Rules</label>
+              <textarea value={propForm.house_rules} onChange={(e) => setPropForm({ ...propForm, house_rules: e.target.value })} rows={3} placeholder="Check-out by 10:00, no smoking indoors..." className={inputClass} />
+            </div>
+            <div className="mt-4">
+              <label className={labelClass}>Local Tips</label>
+              <textarea value={propForm.local_tips} onChange={(e) => setPropForm({ ...propForm, local_tips: e.target.value })} rows={3} placeholder="Best restaurants, attractions, transport..." className={inputClass} />
+            </div>
+            <div className="mt-4">
+              <label className={labelClass}>Emergency Contact</label>
+              <input value={propForm.emergency_contact} onChange={(e) => setPropForm({ ...propForm, emergency_contact: e.target.value })} placeholder="Manager: 082 123 4567" className={inputClass} />
+            </div>
+          </div>
+
           <button onClick={saveProperty} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
             <Save size={16} /> Save
           </button>
@@ -348,7 +421,7 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-4 mb-4">
             {photos.map((photo) => (
               <div key={photo} className="relative group w-32 h-32 rounded-lg overflow-hidden border border-border">
-                <img src={`${UPLOADS_URL}/${photo}`} alt="" className="w-full h-full object-cover" />
+                <img src={photoUrl(photo)} alt="" className="w-full h-full object-cover" />
                 <button
                   onClick={() => deletePropertyPhoto(photo)}
                   className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -604,6 +677,125 @@ export default function SettingsPage() {
           <button onClick={saveNotifications} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50 mt-6">
             <Save size={16} /> Save Notification Settings
           </button>
+        </div>
+      )}
+
+      {tab === 'templates' && (
+        <div className="bg-white rounded-xl border border-border shadow-sm p-6">
+          <h3 className="font-semibold mb-1">Email Templates</h3>
+          <p className="text-sm text-muted mb-6">Customize the emails sent to guests and staff. Use {'{{variableName}}'} for dynamic content.</p>
+
+          <div className="space-y-4">
+            {Object.entries(templateVars).map(([type, vars]) => {
+              const existing = templates.find((t) => t.template_type === type);
+              const isEditing = editingTemplate === type;
+              return (
+                <div key={type} className="border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h4 className="text-sm font-semibold capitalize">{type.replace(/_/g, ' ')}</h4>
+                      <p className="text-xs text-muted">
+                        {existing ? 'Custom template' : 'Using default template'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (isEditing) {
+                          setEditingTemplate(null);
+                        } else {
+                          setEditingTemplate(type);
+                          setTemplateForm({
+                            subject: existing?.subject || '',
+                            bodyHtml: existing?.body_html || '',
+                          });
+                        }
+                      }}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      {isEditing ? 'Cancel' : existing ? 'Edit' : 'Customize'}
+                    </button>
+                  </div>
+
+                  {isEditing && (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <label className={labelClass}>Subject Line</label>
+                        <input
+                          value={templateForm.subject}
+                          onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })}
+                          className={inputClass}
+                          placeholder={`e.g. Booking Confirmed — {{referenceNumber}}`}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Email Body (HTML)</label>
+                        <textarea
+                          value={templateForm.bodyHtml}
+                          onChange={(e) => setTemplateForm({ ...templateForm, bodyHtml: e.target.value })}
+                          rows={8}
+                          className={inputClass + ' font-mono text-xs'}
+                          placeholder="<p>Dear {{guestName}},</p><p>Your booking at {{propertyName}} is confirmed.</p>"
+                        />
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <p className="text-xs font-medium text-slate-600 mb-1">Available variables:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {vars.map((v) => (
+                            <code key={v} className="text-[10px] px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-600 cursor-pointer hover:bg-primary/5"
+                              onClick={() => {
+                                setTemplateForm({ ...templateForm, bodyHtml: templateForm.bodyHtml + `{{${v}}}` });
+                              }}
+                            >
+                              {`{{${v}}}`}
+                            </code>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            if (!property || !templateForm.subject || !templateForm.bodyHtml) return;
+                            setSaving(true);
+                            try {
+                              await api.put(`/properties/${property.id}/email-templates/${type}`, templateForm);
+                              const t = await api.get<EmailTemplateRecord[]>(`/properties/${property.id}/email-templates`);
+                              setTemplates(Array.isArray(t) ? t : []);
+                              setEditingTemplate(null);
+                              setMessage('Template saved!');
+                              setTimeout(() => setMessage(''), 3000);
+                            } catch (err: any) {
+                              setMessage(err.message);
+                            }
+                            setSaving(false);
+                          }}
+                          disabled={saving}
+                          className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          Save Template
+                        </button>
+                        {existing && (
+                          <button
+                            onClick={async () => {
+                              if (!property) return;
+                              await api.delete(`/properties/${property.id}/email-templates/${existing.id}`);
+                              const t = await api.get<EmailTemplateRecord[]>(`/properties/${property.id}/email-templates`);
+                              setTemplates(Array.isArray(t) ? t : []);
+                              setEditingTemplate(null);
+                              setMessage('Reset to default template');
+                              setTimeout(() => setMessage(''), 3000);
+                            }}
+                            className="px-4 py-2 text-sm text-danger hover:text-danger/80"
+                          >
+                            Reset to Default
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

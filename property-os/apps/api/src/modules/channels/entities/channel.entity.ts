@@ -17,6 +17,8 @@ export enum ChannelType {
   BOOKING_COM = 'booking_com',
   AIRBNB = 'airbnb',
   EXPEDIA = 'expedia',
+  LEKKESLAAP = 'lekkeslaap',
+  SAFARINOW = 'safarinow',
   ICAL = 'ical',
 }
 

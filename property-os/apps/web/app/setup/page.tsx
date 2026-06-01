@@ -70,6 +70,10 @@ export default function SetupPage() {
     deposit_required: false,
     deposit_percentage: 50,
     cancellation_policy: 'Free cancellation up to 48 hours before check-in.',
+    wifi_name: '',
+    wifi_password: '',
+    house_rules: '',
+    local_tips: '',
   });
 
   useEffect(() => {
@@ -373,6 +377,29 @@ export default function SetupPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cancellation policy</label>
                 <textarea value={bookingSettings.cancellation_policy} onChange={(e) => updateBooking('cancellation_policy', e.target.value)} rows={3} className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="Free cancellation up to 48 hours before check-in." />
+              </div>
+
+              {/* WiFi & Guest Info */}
+              <div className="border-t border-border pt-4">
+                <h4 className="font-medium text-sm mb-3">Guest Information</h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">WiFi Network Name</label>
+                    <input value={bookingSettings.wifi_name} onChange={(e) => updateBooking('wifi_name', e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="MyGuesthouse-WiFi" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">WiFi Password</label>
+                    <input value={bookingSettings.wifi_password} onChange={(e) => updateBooking('wifi_password', e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="password123" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">House Rules</label>
+                  <textarea value={bookingSettings.house_rules} onChange={(e) => updateBooking('house_rules', e.target.value)} rows={3} className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="No smoking indoors. Quiet hours after 10 PM. No parties." />
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Local Tips</label>
+                  <textarea value={bookingSettings.local_tips} onChange={(e) => updateBooking('local_tips', e.target.value)} rows={3} className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" placeholder="Best restaurants nearby, attractions, transport tips..." />
+                </div>
               </div>
             </div>
 

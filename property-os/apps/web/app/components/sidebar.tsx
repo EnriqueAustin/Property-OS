@@ -20,29 +20,65 @@ import {
   Radio,
   Layers,
   Scale,
+  Zap,
+  Sparkles,
+
+  RotateCcw,
+  FileText,
+  Coins,
+  Shield,
+  AlertTriangle,
+  DoorOpen,
+  UserCog,
+  History,
+  Building2,
+  Tag,
+  LayoutList,
+  MessageSquare,
+  Package,
+  Landmark,
+  Link2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../lib/auth-context';
+import { ThemeToggle } from './theme-toggle';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: CalendarDays },
+  { href: '/dashboard/frontdesk', label: 'Front Desk', icon: DoorOpen },
   { href: '/dashboard/bookings', label: 'Bookings', icon: ClipboardList },
   { href: '/dashboard/rooms', label: 'Rooms & Rates', icon: BedDouble },
   { href: '/dashboard/availability', label: 'Availability', icon: Layers },
   { href: '/dashboard/guests', label: 'Guests', icon: Users },
   { href: '/dashboard/payments', label: 'Payments', icon: CreditCard },
+  { href: '/dashboard/refunds', label: 'Refunds', icon: RotateCcw },
+  { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
+  { href: '/dashboard/financial', label: 'Financial', icon: Coins },
   { href: '/dashboard/channels', label: 'Channels', icon: Radio },
   { href: '/dashboard/rate-parity', label: 'Rate Parity', icon: Scale },
+  { href: '/dashboard/pricing', label: 'Pricing Rules', icon: Zap },
+  { href: '/dashboard/promo-codes', label: 'Promo Codes', icon: Tag },
+  { href: '/dashboard/rate-plans', label: 'Rate Plans', icon: LayoutList },
+  { href: '/dashboard/packages', label: 'Packages', icon: Package },
+  { href: '/dashboard/housekeeping', label: 'Housekeeping', icon: Sparkles },
+  { href: '/dashboard/alerts', label: 'Smart Alerts', icon: AlertTriangle },
+  { href: '/dashboard/reviews', label: 'Reviews', icon: MessageSquare },
+  { href: '/dashboard/staff', label: 'Staff', icon: UserCog },
+  { href: '/dashboard/audit-log', label: 'Audit Log', icon: History },
+  { href: '/dashboard/portfolio', label: 'Portfolio', icon: Building2 },
   { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
+  { href: '/dashboard/tourism-levy', label: 'Tourism Levy', icon: Landmark },
+  { href: '/dashboard/accounting', label: 'Accounting', icon: Link2 },
+  { href: '/dashboard/privacy', label: 'Data Privacy', icon: Shield },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
 const BOTTOM_NAV_ITEMS = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Cal', icon: CalendarDays },
-  { href: '/dashboard/bookings/new', label: 'New', icon: Plus, accent: true },
+  { href: '/dashboard/bookings?new=1', label: 'New', icon: Plus, accent: true },
   { href: '/dashboard/bookings', label: 'Book', icon: ClipboardList },
 ];
 
@@ -107,7 +143,8 @@ export function Sidebar() {
         </nav>
 
         {/* User */}
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border space-y-3">
+          <ThemeToggle />
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
               {user?.firstName?.[0]}{user?.lastName?.[0]}
@@ -172,6 +209,9 @@ export function Sidebar() {
           <>
             <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
             <div className="absolute bottom-16 left-0 right-0 z-50 bg-white border-t border-border shadow-lg rounded-t-xl p-4">
+              <div className="mb-4">
+                <ThemeToggle />
+              </div>
               <div className="grid grid-cols-4 gap-4">
                 {NAV_ITEMS.filter(
                   (item) => !BOTTOM_NAV_ITEMS.some((b) => b.href === item.href),

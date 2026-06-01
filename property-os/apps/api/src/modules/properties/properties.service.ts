@@ -92,7 +92,7 @@ export class PropertiesService {
     });
     if (!property) throw new NotFoundException('Property not found');
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Johannesburg' });
     const monthStart = today.slice(0, 7) + '-01';
     const monthEnd = today;
 
@@ -111,7 +111,7 @@ export class PropertiesService {
     const total = parseInt(occupancyResult[0]?.total || '1', 10);
     const occupancyRate = total > 0 ? Math.round((booked / total) * 1000) / 10 : 0;
 
-    // Revenue MTD
+    // Revenue MTD (payments first, fall back to booking value)
     const revenueResult = await this.dataSource.query(
       `SELECT COALESCE(SUM(p.amount), 0) AS revenue
        FROM payments p
@@ -120,7 +120,20 @@ export class PropertiesService {
          AND p.paid_at >= $2`,
       [propertyId, monthStart],
     );
-    const revenueMtd = parseFloat(revenueResult[0]?.revenue || '0');
+    const paymentRevenue = parseFloat(revenueResult[0]?.revenue || '0');
+
+    let revenueMtd = paymentRevenue;
+    if (revenueMtd === 0) {
+      const bookingRevenueResult = await this.dataSource.query(
+        `SELECT COALESCE(SUM(b.total_price), 0) AS revenue
+         FROM bookings b
+         WHERE b.property_id = $1
+           AND b.status NOT IN ('cancelled', 'no_show')
+           AND b.check_in >= $2`,
+        [propertyId, monthStart],
+      );
+      revenueMtd = parseFloat(bookingRevenueResult[0]?.revenue || '0');
+    }
 
     // Today's check-ins and check-outs
     const todayActivity = await this.dataSource.query(
@@ -139,8 +152,9 @@ export class PropertiesService {
       [propertyId, today],
     );
 
-    const todayCheckIns = todayActivity.filter((a: any) => a.check_in === today);
-    const todayCheckOuts = todayActivity.filter((a: any) => a.check_out === today);
+    const toDateStr = (d: any) => d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
+    const todayCheckIns = todayActivity.filter((a: any) => toDateStr(a.check_in) === today);
+    const todayCheckOuts = todayActivity.filter((a: any) => toDateStr(a.check_out) === today);
 
     // Total bookings this month
     const bookingCountResult = await this.dataSource.query(
@@ -196,7 +210,7 @@ export class PropertiesService {
         reference: a.reference_number,
         guestName: `${a.first_name} ${a.last_name}`,
         roomName: a.room_name,
-        type: a.check_in === today ? 'check_in' : 'check_out',
+        type: toDateStr(a.check_in) === today ? 'check_in' : 'check_out',
         status: a.status,
       })),
       booking_sources: sourcesResult.map((s: any) => ({
@@ -219,6 +233,93 @@ export class PropertiesService {
 
     await this.cache.set(cacheKey, result, 120);
     return result;
+  }
+
+  async getPortfolioOverview(userId: string) {
+    const properties = await this.listForUser(userId);
+    if (properties.length === 0) return { properties: [], totals: { revenue_mtd: 0, total_bookings: 0, avg_occupancy: 0 } };
+
+    const ids = properties.map((p) => p.id);
+    const today = new Date().toISOString().slice(0, 10);
+    const monthStart = today.slice(0, 7) + '-01';
+
+    const revenueRows = await this.dataSource.query(
+      `SELECT p.property_id, COALESCE(SUM(p.amount), 0) AS revenue
+       FROM payments p
+       WHERE p.property_id = ANY($1)
+         AND p.status = 'completed'
+         AND p.paid_at >= $2
+       GROUP BY p.property_id`,
+      [ids, monthStart],
+    );
+    const revenueMap = new Map<string, number>(revenueRows.map((r: any) => [r.property_id, parseFloat(r.revenue)]));
+
+    const bookingRows = await this.dataSource.query(
+      `SELECT property_id, COUNT(*) AS cnt
+       FROM bookings
+       WHERE property_id = ANY($1)
+         AND status NOT IN ('cancelled', 'no_show')
+         AND created_at >= $2
+       GROUP BY property_id`,
+      [ids, monthStart],
+    );
+    const bookingMap = new Map<string, number>(bookingRows.map((r: any) => [r.property_id, parseInt(r.cnt, 10)]));
+
+    const occupancyRows = await this.dataSource.query(
+      `SELECT r.property_id,
+              COUNT(CASE WHEN ra.status = 'booked' THEN 1 END) AS booked,
+              COUNT(*) AS total
+       FROM room_availability ra
+       JOIN rooms r ON ra.room_id = r.id
+       WHERE r.property_id = ANY($1)
+         AND ra.date BETWEEN $2 AND $3
+       GROUP BY r.property_id`,
+      [ids, monthStart, today],
+    );
+    const occMap = new Map<string, { booked: number; total: number }>(occupancyRows.map((r: any) => [r.property_id, {
+      booked: parseInt(r.booked, 10),
+      total: parseInt(r.total, 10),
+    }]));
+
+    const checkinsRows = await this.dataSource.query(
+      `SELECT property_id, COUNT(*) AS cnt
+       FROM bookings
+       WHERE property_id = ANY($1)
+         AND status NOT IN ('cancelled', 'no_show')
+         AND check_in = $2
+       GROUP BY property_id`,
+      [ids, today],
+    );
+    const checkinMap = new Map<string, number>(checkinsRows.map((r: any) => [r.property_id, parseInt(r.cnt, 10)]));
+
+    const propertyData = properties.map((prop) => {
+      const occ = occMap.get(prop.id);
+      const occupancy = occ && occ.total > 0 ? Math.round((occ.booked / occ.total) * 1000) / 10 : 0;
+      return {
+        id: prop.id,
+        name: prop.name,
+        revenue_mtd: revenueMap.get(prop.id) || 0,
+        bookings_mtd: bookingMap.get(prop.id) || 0,
+        occupancy_rate: occupancy,
+        todays_checkins: checkinMap.get(prop.id) || 0,
+      };
+    });
+
+    const totalRevenue = propertyData.reduce((s, p) => s + p.revenue_mtd, 0);
+    const totalBookings = propertyData.reduce((s, p) => s + p.bookings_mtd, 0);
+    const avgOccupancy = propertyData.length > 0
+      ? Math.round(propertyData.reduce((s, p) => s + p.occupancy_rate, 0) / propertyData.length * 10) / 10
+      : 0;
+
+    return {
+      properties: propertyData,
+      totals: {
+        revenue_mtd: totalRevenue,
+        total_bookings: totalBookings,
+        avg_occupancy: avgOccupancy,
+        todays_checkins: propertyData.reduce((s, p) => s + p.todays_checkins, 0),
+      },
+    };
   }
 
   async getBookingSettings(propertyId: string) {

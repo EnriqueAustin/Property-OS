@@ -73,6 +73,8 @@ const CHANNEL_TYPES = [
   { value: 'airbnb', label: 'Airbnb', color: 'bg-rose-500' },
   { value: 'booking_com', label: 'Booking.com', color: 'bg-blue-600' },
   { value: 'expedia', label: 'Expedia', color: 'bg-yellow-500' },
+  { value: 'lekkeslaap', label: 'LekkeSlaap', color: 'bg-emerald-600' },
+  { value: 'safarinow', label: 'SafariNow', color: 'bg-amber-600' },
   { value: 'ical', label: 'iCal Feed', color: 'bg-slate-500' },
 ];
 
@@ -86,6 +88,7 @@ export default function ChannelsPage() {
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Create form
   const [form, setForm] = useState({
@@ -98,6 +101,10 @@ export default function ChannelsPage() {
   });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const flash = (msg: string) => { setMessage(msg); setTimeout(() => setMessage(''), 4000); };
+  const flashError = (err: any, fallback: string) => { flash(err?.message || fallback); };
 
   // Mapping form
   const [showAddMapping, setShowAddMapping] = useState(false);
@@ -109,21 +116,21 @@ export default function ChannelsPage() {
   const fetchChannels = async () => {
     if (!property) return;
     try {
-      const res = await api.get<{ data: Channel[] }>(
+      const res = await api.get<Channel[]>(
         `/properties/${property.id}/channels`,
       );
-      setChannels(res.data || []);
-    } catch {}
+      setChannels(Array.isArray(res) ? res : []);
+    } catch (err: any) { flashError(err, 'Failed to load channels'); }
   };
 
   const fetchRoomTypes = async () => {
     if (!property) return;
     try {
-      const res = await api.get<{ data: RoomType[] }>(
+      const res = await api.get<RoomType[]>(
         `/properties/${property.id}/room-types`,
       );
-      setRoomTypes(res.data || []);
-    } catch {}
+      setRoomTypes(Array.isArray(res) ? res : []);
+    } catch (err: any) { flashError(err, 'Failed to load room types'); }
   };
 
   useEffect(() => {
@@ -165,12 +172,13 @@ export default function ChannelsPage() {
   };
 
   const deleteChannel = async (channelId: string) => {
-    if (!property || !confirm('Remove this channel connection?')) return;
+    if (!property) return;
     try {
       await api.delete(`/properties/${property.id}/channels/${channelId}`);
       if (selectedChannel?.id === channelId) setSelectedChannel(null);
+      setConfirmDeleteId(null);
       await fetchChannels();
-    } catch {}
+    } catch (err: any) { flashError(err, 'Failed to delete channel'); }
   };
 
   const triggerSync = async (channelId: string) => {
@@ -182,7 +190,7 @@ export default function ChannelsPage() {
       if (selectedChannel?.id === channelId) {
         await loadSyncLogs(channelId);
       }
-    } catch {}
+    } catch (err: any) { flashError(err, 'Sync failed'); }
     setSyncing(null);
   };
 
@@ -194,17 +202,17 @@ export default function ChannelsPage() {
         status: newStatus,
       });
       await fetchChannels();
-    } catch {}
+    } catch (err: any) { flashError(err, 'Failed to update channel'); }
   };
 
   const loadSyncLogs = async (channelId: string) => {
     if (!property) return;
     try {
-      const res = await api.get<{ data: SyncLog[] }>(
+      const res = await api.get<SyncLog[]>(
         `/properties/${property.id}/channels/${channelId}/logs`,
       );
-      setSyncLogs(res.data || []);
-    } catch {}
+      setSyncLogs(Array.isArray(res) ? res : []);
+    } catch (err: any) { flashError(err, 'Failed to load sync logs'); }
   };
 
   const openDetail = async (channel: Channel) => {
@@ -228,7 +236,7 @@ export default function ChannelsPage() {
       await fetchChannels();
       const updated = channels.find((c) => c.id === selectedChannel.id);
       if (updated) setSelectedChannel(updated);
-    } catch {}
+    } catch (err: any) { flashError(err, 'Failed to add mapping'); }
   };
 
   const removeMapping = async (mappingId: string) => {
@@ -238,7 +246,7 @@ export default function ChannelsPage() {
         `/properties/${property.id}/channels/${selectedChannel.id}/mappings/${mappingId}`,
       );
       await fetchChannels();
-    } catch {}
+    } catch (err: any) { flashError(err, 'Failed to remove mapping'); }
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -273,6 +281,7 @@ export default function ChannelsPage() {
 
   return (
     <div className="space-y-6">
+      {message && <div className="p-3 rounded-lg bg-danger/10 text-danger text-sm">{message}</div>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -376,7 +385,7 @@ export default function ChannelsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteChannel(channel.id);
+                        setConfirmDeleteId(channel.id);
                       }}
                       className="p-1.5 rounded-lg hover:bg-danger/10 transition"
                       title="Remove"
@@ -648,6 +657,20 @@ export default function ChannelsPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm Delete Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Remove Channel</h2>
+            <p className="text-sm text-muted">Are you sure you want to remove this channel connection? All mappings and sync history will be deleted.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 border border-border rounded-lg text-sm">Cancel</button>
+              <button onClick={() => deleteChannel(confirmDeleteId)} className="px-4 py-2 bg-danger text-white rounded-lg text-sm font-medium hover:bg-danger/90">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create modal */}
       {showCreate && (

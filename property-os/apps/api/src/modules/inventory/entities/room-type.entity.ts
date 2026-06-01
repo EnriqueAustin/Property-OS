@@ -46,6 +46,18 @@ export class RoomType {
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
 
+  @Column({ type: 'int', default: 2 })
+  base_occupancy: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  single_occupancy_rate: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  extra_person_rate: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  child_rate: number;
+
   @Column({ type: 'jsonb', default: '[]' })
   photos: string[];
 

@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Search, ChevronLeft, ChevronRight, X, Mail, Phone, MapPin, Pencil, Save } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, Mail, Phone, MapPin, Pencil, Save, Download, Star } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { api } from '../../lib/api';
+import { formatCurrency, formatDate } from '../../lib/format';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 interface Guest {
   id: string;
@@ -16,6 +19,9 @@ interface Guest {
   notes?: string;
   total_stays: number;
   total_revenue: number;
+  bookingCount?: number;
+  totalSpent?: number;
+  isRepeatGuest?: boolean;
 }
 
 interface GuestBooking {
@@ -89,7 +95,7 @@ export default function GuestsPage() {
     setLoadingDetail(true);
     setEditing(false);
     try {
-      const detail = await api.get<GuestDetail>(`/guests/${guestId}`);
+      const detail = await api.get<GuestDetail>(`/properties/${property!.id}/guests/${guestId}`);
       setSelectedGuest(detail);
       setEditForm({
         first_name: detail.first_name || '',
@@ -110,7 +116,7 @@ export default function GuestsPage() {
     if (!selectedGuest) return;
     setSaving(true);
     try {
-      await api.patch(`/guests/${selectedGuest.id}`, editForm);
+      await api.patch(`/properties/${property!.id}/guests/${selectedGuest.id}`, editForm);
       setEditing(false);
       await openDetail(selectedGuest.id);
       await fetchGuests();
@@ -139,6 +145,16 @@ export default function GuestsPage() {
           <h2 className="text-2xl font-bold">Guests</h2>
           <p className="text-sm text-muted mt-1">{meta.total} guest{meta.total !== 1 ? 's' : ''} total</p>
         </div>
+        <button
+          onClick={() => {
+            if (!property) return;
+            const token = typeof window !== 'undefined' ? localStorage.getItem('pos_token') : '';
+            window.open(`${API_URL}/properties/${property.id}/guests/export/marketing?token=${token}`, '_blank');
+          }}
+          className="flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg hover:bg-slate-50"
+        >
+          <Download size={16} /> Export Marketing List
+        </button>
       </div>
 
       <div className="relative mb-6 max-w-md">
@@ -178,12 +194,19 @@ export default function GuestsPage() {
                       onClick={() => openDetail(g.id)}
                       className="border-b border-border last:border-0 hover:bg-slate-50 cursor-pointer"
                     >
-                      <td className="px-5 py-3 font-medium">{g.first_name} {g.last_name}</td>
+                      <td className="px-5 py-3 font-medium">
+                        {g.first_name} {g.last_name}
+                        {(g.isRepeatGuest || (g.bookingCount && g.bookingCount > 1)) && (
+                          <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700" title={`${g.bookingCount || g.total_stays} stays`}>
+                            <Star size={10} /> Repeat
+                          </span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-muted">{g.email || '—'}</td>
                       <td className="px-5 py-3 text-muted">{g.phone || '—'}</td>
                       <td className="px-5 py-3">{g.country || '—'}</td>
                       <td className="px-5 py-3 text-right">{g.total_stays}</td>
-                      <td className="px-5 py-3 text-right">R {Number(g.total_revenue).toLocaleString()}</td>
+                      <td className="px-5 py-3 text-right">{formatCurrency(Number(g.total_revenue))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -261,7 +284,7 @@ export default function GuestsPage() {
                         )}
                         <div className="flex gap-3 text-xs text-muted mt-1">
                           <span>{selectedGuest.total_stays} stays</span>
-                          <span>R {Number(selectedGuest.total_revenue).toLocaleString()} total</span>
+                          <span>{formatCurrency(Number(selectedGuest.total_revenue))} total</span>
                         </div>
                       </div>
                     </div>
@@ -344,8 +367,8 @@ export default function GuestsPage() {
                             {b.roomName && <span className="text-muted"> &middot; {b.roomName}</span>}
                           </div>
                           <div className="flex justify-between text-xs text-muted mt-1">
-                            <span>{b.checkIn} &rarr; {b.checkOut} ({b.nights}n)</span>
-                            <span className="font-medium text-slate-700">R {b.totalPrice.toLocaleString()}</span>
+                            <span>{formatDate(b.checkIn)} &rarr; {formatDate(b.checkOut)} ({b.nights}n)</span>
+                            <span className="font-medium text-slate-700">{formatCurrency(b.totalPrice)}</span>
                           </div>
                           <div className="text-xs text-muted mt-1 capitalize">{b.source}</div>
                         </div>
