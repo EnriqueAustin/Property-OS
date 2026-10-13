@@ -674,9 +674,9 @@ export class BookingsService {
 
   // -- Get single booking ---------------------------------------------------
 
-  async getBooking(bookingId: string, propertyId?: string): Promise<Booking> {
+  async getBooking(bookingId: string, propertyId: string): Promise<Booking> {
     const booking = await this.bookingsRepo.findOne({
-      where: { id: bookingId, ...(propertyId ? { property_id: propertyId } : {}) },
+      where: { id: bookingId, property_id: propertyId },
       relations: ['guest', 'room', 'room.room_type', 'property'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
@@ -685,9 +685,9 @@ export class BookingsService {
 
   // -- Get booking group ----------------------------------------------------
 
-  async getBookingGroup(groupId: string, propertyId?: string): Promise<Booking[]> {
+  async getBookingGroup(groupId: string, propertyId: string): Promise<Booking[]> {
     const bookings = await this.bookingsRepo.find({
-      where: { group_id: groupId, ...(propertyId ? { property_id: propertyId } : {}) },
+      where: { group_id: groupId, property_id: propertyId },
       relations: ['guest', 'room', 'room.room_type', 'property'],
       order: { group_index: 'ASC' },
     });
@@ -700,7 +700,7 @@ export class BookingsService {
   async updateBooking(
     bookingId: string,
     dto: UpdateBookingDto,
-    propertyId?: string,
+    propertyId: string,
   ): Promise<Booking> {
     const booking = await this.getBooking(bookingId, propertyId);
     const snapshot = {
@@ -790,7 +790,7 @@ export class BookingsService {
   async updateStatus(
     bookingId: string,
     dto: UpdateStatusDto,
-    propertyId?: string,
+    propertyId: string,
   ): Promise<Booking> {
     const booking = await this.getBooking(bookingId, propertyId);
     const oldStatus = booking.status;
@@ -847,7 +847,7 @@ export class BookingsService {
   async cancelBooking(
     bookingId: string,
     dto: CancelBookingDto,
-    propertyId?: string,
+    propertyId: string,
   ): Promise<Booking> {
     const booking = await this.getBooking(bookingId, propertyId);
     const allowed = VALID_TRANSITIONS[booking.status];
@@ -887,7 +887,7 @@ export class BookingsService {
   async cancelBookingGroup(
     groupId: string,
     dto: CancelBookingDto,
-    propertyId?: string,
+    propertyId: string,
   ): Promise<Booking[]> {
     const bookings = await this.getBookingGroup(groupId, propertyId);
     const results: Booking[] = [];

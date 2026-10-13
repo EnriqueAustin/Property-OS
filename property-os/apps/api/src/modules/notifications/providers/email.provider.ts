@@ -26,7 +26,6 @@ export class EmailProvider {
       this.logger.warn(
         `[STUB] Email not sent (no RESEND_API_KEY configured). To: ${payload.to}, Subject: ${payload.subject}`,
       );
-      this.logger.debug(`[STUB] Email body:\n${payload.html}`);
       return { success: false, error: 'No email provider configured (RESEND_API_KEY missing)' };
     }
 
