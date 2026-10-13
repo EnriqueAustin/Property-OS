@@ -22,6 +22,7 @@ const ROLE_OPTIONS = [
   { value: 'owner', label: 'Owner', color: 'bg-purple-100 text-purple-700' },
   { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-700' },
   { value: 'staff', label: 'Staff', color: 'bg-slate-100 text-slate-700' },
+  { value: 'housekeeping', label: 'Housekeeping', color: 'bg-amber-100 text-amber-700' },
 ];
 
 export default function StaffPage() {

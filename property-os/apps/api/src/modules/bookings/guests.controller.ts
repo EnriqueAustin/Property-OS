@@ -37,7 +37,7 @@ export class GuestsController {
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('guestId', new ParseUUIDPipe()) guestId: string,
   ) {
-    return this.guests.getGuest(guestId);
+    return this.guests.getGuest(guestId, propertyId);
   }
 
   @Patch('properties/:propertyId/guests/:guestId')
@@ -48,7 +48,7 @@ export class GuestsController {
     @Param('guestId', new ParseUUIDPipe()) guestId: string,
     @Body() dto: UpdateGuestDto,
   ) {
-    return this.guests.updateGuest(guestId, dto);
+    return this.guests.updateGuest(guestId, dto, propertyId);
   }
 
   @Get('properties/:propertyId/guests/export/marketing')

@@ -23,6 +23,7 @@ import {
   newBookingAlertEmail,
   paymentReceivedEmail,
 } from './templates/email.templates';
+import { escapeHtml } from './templates/html-escape.util';
 import {
   BOOKING_EVENTS,
   BookingCreatedEvent,
@@ -192,7 +193,9 @@ export class NotificationsService {
     const changesHtml = Object.entries(changes)
       .map(([key, { old: oldVal, new: newVal }]) => {
         const label = fieldLabels[key] || key;
-        return `<p style="margin: 4px 0; color: #475569;"><strong>${label}:</strong> ${oldVal || '—'} → ${newVal || '—'}</p>`;
+        // Values can include guest-supplied text (e.g. special_requests), so
+        // escape them before building the trusted HTML fragment (audit S9).
+        return `<p style="margin: 4px 0; color: #475569;"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(oldVal) || '—'} → ${escapeHtml(newVal) || '—'}</p>`;
       })
       .join('');
 

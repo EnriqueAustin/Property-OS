@@ -15,6 +15,10 @@ export enum Permission {
   PAYMENTS_VIEW = 'payments:view',
   PAYMENTS_MANAGE = 'payments:manage',
 
+  // Accounting integrations (Xero, Sage, QuickBooks, etc.)
+  ACCOUNTING_VIEW = 'accounting:view',
+  ACCOUNTING_MANAGE = 'accounting:manage',
+
   // Reports
   REPORTS_VIEW = 'reports:view',
 
@@ -64,6 +68,8 @@ export const DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
     Permission.GUESTS_MANAGE,
     Permission.PAYMENTS_VIEW,
     Permission.PAYMENTS_MANAGE,
+    Permission.ACCOUNTING_VIEW,
+    Permission.ACCOUNTING_MANAGE,
     Permission.REPORTS_VIEW,
     Permission.HOUSEKEEPING_VIEW,
     Permission.HOUSEKEEPING_MANAGE,
@@ -91,6 +97,11 @@ export const DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
     Permission.FRONTDESK_MANAGE,
     Permission.NOTIFICATIONS_VIEW,
   ],
+
+  housekeeping: [
+    Permission.HOUSEKEEPING_VIEW,
+    Permission.HOUSEKEEPING_MANAGE,
+  ],
 };
 
 export const PERMISSION_GROUPS = [
@@ -109,6 +120,10 @@ export const PERMISSION_GROUPS = [
   {
     label: 'Payments & Invoices',
     permissions: [Permission.PAYMENTS_VIEW, Permission.PAYMENTS_MANAGE],
+  },
+  {
+    label: 'Accounting Integrations',
+    permissions: [Permission.ACCOUNTING_VIEW, Permission.ACCOUNTING_MANAGE],
   },
   {
     label: 'Reports',

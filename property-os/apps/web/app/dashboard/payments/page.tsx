@@ -39,10 +39,12 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
     if (!property) return;
     setLoading(true);
+    setFetchError('');
     const params = new URLSearchParams({ page: String(page), limit: '20' });
     if (status) params.set('status', status);
     api.get<{ data: Payment[]; meta: PaymentMeta }>(`/properties/${property.id}/payments?${params}`)
@@ -50,7 +52,9 @@ export default function PaymentsPage() {
         setPayments(res.data || []);
         setMeta(res.meta || { page: 1, totalPages: 1, total: 0 });
       })
-      .catch(() => {})
+      .catch((err: any) => {
+        setFetchError(err.message || 'Failed to load payments');
+      })
       .finally(() => setLoading(false));
   }, [property, page, status]);
 
@@ -74,6 +78,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm flex items-center gap-2"><AlertCircle size={16} />{fetchError}</div>}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Payments</h2>
       </div>

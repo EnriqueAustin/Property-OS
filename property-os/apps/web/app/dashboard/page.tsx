@@ -58,8 +58,9 @@ export default function DashboardPage() {
 
   const todayCheckIns = stats?.todayCheckIns ?? 0;
   const todayCheckOuts = stats?.todayCheckOuts ?? 0;
-  const totalBookings = stats?.totalBookings ?? bookings.filter((b) => !['cancelled', 'no_show'].includes(b.status)).length;
-  const revenue = stats?.revenue ?? bookings.filter((b) => !['cancelled', 'no_show'].includes(b.status)).reduce((s, b) => s + Number(b.total_price), 0);
+  const activeBookings = bookings.filter((b) => !['cancelled', 'no_show'].includes(b.status));
+  const totalBookings = stats?.totalBookings ?? activeBookings.length;
+  const revenue = stats?.revenue ?? activeBookings.reduce((s, b) => s + Number(b.total_price), 0);
 
   const KPI_CARDS = [
     { label: 'Total Bookings', value: totalBookings, icon: ClipboardList, color: 'text-primary bg-primary/10' },

@@ -23,6 +23,13 @@ import {
   UpdateBookingDto,
   UpdateStatusDto,
 } from './dto/update-booking.dto';
+import {
+  BookingLookupDto,
+  PublicPaymentInitiateDto,
+  GuestCancelBookingDto,
+  GuestModifyBookingDto,
+  TrackBookingProgressDto,
+} from './dto/guest-portal.dto';
 
 @Controller()
 export class BookingsController {
@@ -58,64 +65,64 @@ export class BookingsController {
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.BOOKINGS_VIEW)
   getOne(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('bookingId', new ParseUUIDPipe()) bookingId: string,
   ) {
-    return this.bookings.getBooking(bookingId);
+    return this.bookings.getBooking(bookingId, propertyId);
   }
 
   @Get('properties/:propertyId/bookings/group/:groupId')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.BOOKINGS_VIEW)
   getGroup(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('groupId', new ParseUUIDPipe()) groupId: string,
   ) {
-    return this.bookings.getBookingGroup(groupId);
+    return this.bookings.getBookingGroup(groupId, propertyId);
   }
 
   @Patch('properties/:propertyId/bookings/:bookingId')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.BOOKINGS_MANAGE)
   update(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('bookingId', new ParseUUIDPipe()) bookingId: string,
     @Body() dto: UpdateBookingDto,
   ) {
-    return this.bookings.updateBooking(bookingId, dto);
+    return this.bookings.updateBooking(bookingId, dto, propertyId);
   }
 
   @Patch('properties/:propertyId/bookings/:bookingId/status')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.BOOKINGS_MANAGE)
   updateStatus(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('bookingId', new ParseUUIDPipe()) bookingId: string,
     @Body() dto: UpdateStatusDto,
   ) {
-    return this.bookings.updateStatus(bookingId, dto);
+    return this.bookings.updateStatus(bookingId, dto, propertyId);
   }
 
   @Post('properties/:propertyId/bookings/:bookingId/cancel')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.BOOKINGS_MANAGE)
   cancel(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('bookingId', new ParseUUIDPipe()) bookingId: string,
     @Body() dto: CancelBookingDto,
   ) {
-    return this.bookings.cancelBooking(bookingId, dto);
+    return this.bookings.cancelBooking(bookingId, dto, propertyId);
   }
 
   @Post('properties/:propertyId/bookings/group/:groupId/cancel')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.BOOKINGS_MANAGE)
   cancelGroup(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('groupId', new ParseUUIDPipe()) groupId: string,
     @Body() dto: CancelBookingDto,
   ) {
-    return this.bookings.cancelBookingGroup(groupId, dto);
+    return this.bookings.cancelBookingGroup(groupId, dto, propertyId);
   }
 
   // --- Public endpoints (no auth) -----------------------------------------
@@ -132,6 +139,13 @@ export class BookingsController {
   @Get('public/properties/:slug/guestbook')
   publicGuestbook(@Param('slug') slug: string) {
     return this.bookings.getGuestbook(slug);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
+  @Get('public/properties/:slug/rate-plans')
+  publicRatePlans(@Param('slug') slug: string) {
+    return this.bookings.getPublicRatePlans(slug);
   }
 
   @Public()
@@ -159,27 +173,21 @@ export class BookingsController {
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post('public/bookings/lookup')
-  lookupBooking(
-    @Body() body: { referenceNumber: string; email: string },
-  ) {
+  lookupBooking(@Body() body: BookingLookupDto) {
     return this.bookings.lookupBooking(body.referenceNumber, body.email);
   }
 
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('public/payments/initiate')
-  publicPaymentInitiate(
-    @Body() body: { referenceNumber: string; email: string; paymentType: string },
-  ) {
+  publicPaymentInitiate(@Body() body: PublicPaymentInitiateDto) {
     return this.bookings.initiatePublicPayment(body.referenceNumber, body.email, body.paymentType);
   }
 
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('public/bookings/cancel')
-  guestCancel(
-    @Body() body: { referenceNumber: string; email: string; reason?: string; cancelGroup?: boolean },
-  ) {
+  guestCancel(@Body() body: GuestCancelBookingDto) {
     return this.bookings.guestCancelBooking(
       body.referenceNumber,
       body.email,
@@ -202,21 +210,7 @@ export class BookingsController {
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 30 } })
   @Post('public/bookings/track-progress')
-  trackBookingProgress(
-    @Body()
-    body: {
-      propertyId: string;
-      email: string;
-      firstName?: string;
-      lastName?: string;
-      checkIn?: string;
-      checkOut?: string;
-      roomTypeId?: string;
-      guestCount?: number;
-      stepReached: number;
-      estimatedTotal?: number;
-    },
-  ) {
+  trackBookingProgress(@Body() body: TrackBookingProgressDto) {
     return this.abandonedBookings.trackAbandonment(body);
   }
 
@@ -242,17 +236,7 @@ export class BookingsController {
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Patch('public/bookings/modify')
-  guestModifyBooking(
-    @Body()
-    body: {
-      referenceNumber: string;
-      email: string;
-      checkIn?: string;
-      checkOut?: string;
-      guestCount?: number;
-      specialRequests?: string;
-    },
-  ) {
+  guestModifyBooking(@Body() body: GuestModifyBookingDto) {
     return this.bookings.guestModifyBooking(
       body.referenceNumber,
       body.email,

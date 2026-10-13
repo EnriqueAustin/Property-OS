@@ -39,6 +39,7 @@ export class PropertyOSBooking extends LitElement {
   @state() private searchingRooms = false;
   @state() private selectedRoom: AvailableRoom | null = null;
 
+  @state() private selectedRoomId: string | null = null;
   @state() private submitting = false;
   @state() private bookingResult: BookingResult | null = null;
   @state() private lastGuest: GuestDetails | null = null;
@@ -74,8 +75,9 @@ export class PropertyOSBooking extends LitElement {
     }
   }
 
-  private selectRoom(room: AvailableRoom) {
+  private selectRoom(room: AvailableRoom, roomId?: string) {
     this.selectedRoom = room;
+    this.selectedRoomId = roomId || null;
     this.step = 'details';
   }
 
@@ -86,7 +88,9 @@ export class PropertyOSBooking extends LitElement {
     try {
       this.bookingResult = await this.api.createBooking({
         propertySlug: this.slug,
-        roomTypeId: this.selectedRoom.roomTypeId,
+        ...(this.selectedRoomId
+          ? { roomId: this.selectedRoomId }
+          : { roomTypeId: this.selectedRoom.roomTypeId }),
         checkIn: this.checkIn,
         checkOut: this.checkOut,
         guestCount: this.guests,
@@ -160,8 +164,9 @@ export class PropertyOSBooking extends LitElement {
             <pos-room-select
               .availability=${this.availability}
               .guests=${this.guests}
+              .bookingMode=${this.propertyInfo?.bookingMode || 'hotel'}
               @go-back=${() => { this.step = 'dates'; }}
-              @select-room=${(e: CustomEvent) => this.selectRoom(e.detail)}
+              @select-room=${(e: CustomEvent) => this.selectRoom(e.detail.room ?? e.detail, e.detail.roomId)}
             ></pos-room-select>
           ` : nothing}
 
@@ -170,6 +175,9 @@ export class PropertyOSBooking extends LitElement {
               .selectedRoom=${this.selectedRoom}
               .availability=${this.availability}
               .submitting=${this.submitting}
+              .roomDisplayName=${this.selectedRoomId
+                ? `${this.selectedRoom.rooms?.find(r => r.id === this.selectedRoomId)?.name || ''} — ${this.selectedRoom.roomTypeName}`
+                : ''}
               @go-back=${() => { this.step = 'rooms'; }}
               @submit-booking=${(e: CustomEvent) => this.submitBooking(e.detail)}
             ></pos-guest-details>

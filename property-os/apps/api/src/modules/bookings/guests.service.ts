@@ -60,14 +60,14 @@ export class GuestsService {
     };
   }
 
-  async getGuest(guestId: string) {
+  async getGuest(guestId: string, propertyId: string) {
     const guest = await this.guestsRepo.findOne({
-      where: { id: guestId },
+      where: { id: guestId, property_id: propertyId },
     });
     if (!guest) throw new NotFoundException('Guest not found');
 
     const bookings = await this.bookingsRepo.find({
-      where: { guest_id: guestId },
+      where: { guest_id: guestId, property_id: propertyId },
       relations: ['room', 'room.room_type'],
       order: { check_in: 'DESC' },
       take: 50,
@@ -90,8 +90,10 @@ export class GuestsService {
     };
   }
 
-  async updateGuest(guestId: string, dto: UpdateGuestDto) {
-    const guest = await this.guestsRepo.findOne({ where: { id: guestId } });
+  async updateGuest(guestId: string, dto: UpdateGuestDto, propertyId: string) {
+    const guest = await this.guestsRepo.findOne({
+      where: { id: guestId, property_id: propertyId },
+    });
     if (!guest) throw new NotFoundException('Guest not found');
     Object.assign(guest, dto);
     return this.guestsRepo.save(guest);

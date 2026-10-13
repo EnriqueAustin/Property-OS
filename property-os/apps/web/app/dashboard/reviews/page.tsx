@@ -58,6 +58,7 @@ export default function ReviewsPage() {
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [responseText, setResponseText] = useState('');
   const [error, setError] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   const fetchData = async () => {
     if (!property) return;
@@ -69,7 +70,7 @@ export default function ReviewsPage() {
       const reviewData = (reviewResult as any)?.data ?? (Array.isArray(reviewResult) ? reviewResult : []);
       setReviews(reviewData);
       setSummary(summaryData);
-    } catch { /* empty */ } finally {
+    } catch (err: any) { setFetchError(err.message || 'Failed to load reviews'); } finally {
       setLoading(false);
     }
   };
@@ -96,7 +97,7 @@ export default function ReviewsPage() {
     try {
       await api.patch(`/properties/${property.id}/reviews/${reviewId}/status`, { status });
       fetchData();
-    } catch { /* empty */ }
+    } catch (err: any) { setFetchError(err.message || 'Failed to update review status'); }
   };
 
   const statusColor = (s: string) => {
@@ -152,6 +153,7 @@ export default function ReviewsPage() {
         ))}
       </div>
 
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
       {loading ? (

@@ -117,7 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    api.setToken(null);
+    // Revoke the session server-side; clears local tokens regardless of outcome.
+    void api.logout();
     setUser(null);
     setProperties([]);
     setProperty(null);

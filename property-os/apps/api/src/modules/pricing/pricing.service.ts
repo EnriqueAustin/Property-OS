@@ -24,15 +24,23 @@ export class PricingService {
     });
   }
 
-  async update(ruleId: string, dto: UpdatePricingRuleDto): Promise<PricingRule> {
-    const rule = await this.rulesRepo.findOne({ where: { id: ruleId } });
+  async update(
+    ruleId: string,
+    propertyId: string,
+    dto: UpdatePricingRuleDto,
+  ): Promise<PricingRule> {
+    const rule = await this.rulesRepo.findOne({
+      where: { id: ruleId, property_id: propertyId },
+    });
     if (!rule) throw new NotFoundException('Pricing rule not found');
     Object.assign(rule, dto);
     return this.rulesRepo.save(rule);
   }
 
-  async remove(ruleId: string): Promise<void> {
-    const rule = await this.rulesRepo.findOne({ where: { id: ruleId } });
+  async remove(ruleId: string, propertyId: string): Promise<void> {
+    const rule = await this.rulesRepo.findOne({
+      where: { id: ruleId, property_id: propertyId },
+    });
     if (!rule) throw new NotFoundException('Pricing rule not found');
     await this.rulesRepo.remove(rule);
   }

@@ -81,11 +81,12 @@ export class InventoryService {
 
   async updateRoomType(
     roomTypeId: string,
+    propertyId: string,
     dto: UpdateRoomTypeDto,
   ): Promise<RoomType> {
     return this.dataSource.transaction(async (manager) => {
       const rt = await manager.findOne(RoomType, {
-        where: { id: roomTypeId },
+        where: { id: roomTypeId, property_id: propertyId },
       });
       if (!rt) throw new NotFoundException('Room type not found');
 
@@ -163,8 +164,14 @@ export class InventoryService {
     });
   }
 
-  async updateRoom(roomId: string, dto: UpdateRoomDto): Promise<Room> {
-    const room = await this.roomsRepo.findOne({ where: { id: roomId } });
+  async updateRoom(
+    roomId: string,
+    propertyId: string,
+    dto: UpdateRoomDto,
+  ): Promise<Room> {
+    const room = await this.roomsRepo.findOne({
+      where: { id: roomId, property_id: propertyId },
+    });
     if (!room) throw new NotFoundException('Room not found');
     Object.assign(room, dto);
     return this.roomsRepo.save(room);
@@ -332,8 +339,14 @@ export class InventoryService {
     });
   }
 
-  async updateRatePeriod(ratePeriodId: string, dto: UpdateRatePeriodDto): Promise<RatePeriod> {
-    const rp = await this.ratePeriodRepo.findOne({ where: { id: ratePeriodId } });
+  async updateRatePeriod(
+    ratePeriodId: string,
+    propertyId: string,
+    dto: UpdateRatePeriodDto,
+  ): Promise<RatePeriod> {
+    const rp = await this.ratePeriodRepo.findOne({
+      where: { id: ratePeriodId, property_id: propertyId },
+    });
     if (!rp) throw new NotFoundException('Rate period not found');
     Object.assign(rp, dto);
     if (rp.end_date < rp.start_date) {
@@ -342,8 +355,10 @@ export class InventoryService {
     return this.ratePeriodRepo.save(rp);
   }
 
-  async deleteRatePeriod(ratePeriodId: string): Promise<void> {
-    const rp = await this.ratePeriodRepo.findOne({ where: { id: ratePeriodId } });
+  async deleteRatePeriod(ratePeriodId: string, propertyId: string): Promise<void> {
+    const rp = await this.ratePeriodRepo.findOne({
+      where: { id: ratePeriodId, property_id: propertyId },
+    });
     if (!rp) throw new NotFoundException('Rate period not found');
     await this.ratePeriodRepo.remove(rp);
   }
@@ -399,7 +414,9 @@ export class InventoryService {
   }
 
   async getEffectivePrice(roomTypeId: string, propertyId: string, date: string): Promise<number> {
-    const rt = await this.roomTypesRepo.findOne({ where: { id: roomTypeId } });
+    const rt = await this.roomTypesRepo.findOne({
+      where: { id: roomTypeId, property_id: propertyId },
+    });
     if (!rt) throw new NotFoundException('Room type not found');
 
     const basePrice = Number(rt.base_price);

@@ -4,9 +4,13 @@ import { PricingRule } from './entities/pricing-rule.entity';
 import { PricingService } from './pricing.service';
 import { PricingController, PricingPortfolioController } from './pricing.controller';
 import { PropertiesModule } from '../properties/properties.module';
+import { PropertyUser } from '../properties/entities/property-user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PricingRule]), PropertiesModule],
+  imports: [
+    TypeOrmModule.forFeature([PricingRule, PropertyUser]),
+    PropertiesModule,
+  ],
   controllers: [PricingController, PricingPortfolioController],
   providers: [PricingService],
   exports: [PricingService],

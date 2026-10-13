@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EmailTemplate } from './entities/email-template.entity';
+import { escapeHtml } from './templates/html-escape.util';
 
 const AVAILABLE_VARIABLES = {
   booking_confirmation: ['guestName', 'propertyName', 'referenceNumber', 'checkIn', 'checkOut', 'nights', 'roomName', 'totalPrice', 'currency', 'specialRequests', 'checkInTime', 'checkOutTime'],
@@ -65,8 +66,11 @@ export class EmailTemplatesService {
     let html = custom.body_html;
     for (const [key, value] of Object.entries(variables)) {
       const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-      subject = subject.replace(placeholder, value);
-      html = html.replace(placeholder, value);
+      // Subject is plain text (not rendered as HTML); the body is HTML, so
+      // escape interpolated values there to prevent HTML/script injection from
+      // guest-supplied variables (audit S9).
+      subject = subject.replace(placeholder, value ?? '');
+      html = html.replace(placeholder, escapeHtml(value));
     }
 
     return { subject, html };

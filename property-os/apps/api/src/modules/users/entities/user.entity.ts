@@ -50,6 +50,12 @@ export class User {
   @Column({ type: 'timestamp with time zone', nullable: true })
   password_reset_expires: Date;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  invite_token: string;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  invite_expires: Date;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
 

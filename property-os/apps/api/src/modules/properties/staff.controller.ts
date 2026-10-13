@@ -36,20 +36,22 @@ export class StaffController {
   @Post()
   @RequirePermission(Permission.STAFF_MANAGE)
   invite(
+    @Request() req,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: InviteStaffDto,
   ) {
-    return this.staffService.inviteStaff(propertyId, dto);
+    return this.staffService.inviteStaff(propertyId, dto, req.propertyUser);
   }
 
   @Patch(':membershipId/role')
   @RequirePermission(Permission.STAFF_MANAGE)
   updateRole(
+    @Request() req,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('membershipId', ParseUUIDPipe) membershipId: string,
     @Body() dto: UpdateStaffRoleDto,
   ) {
-    return this.staffService.updateRole(propertyId, membershipId, dto);
+    return this.staffService.updateRole(propertyId, membershipId, dto, req.propertyUser);
   }
 
   @Patch(':membershipId/permissions')
@@ -71,18 +73,20 @@ export class StaffController {
   @Patch(':membershipId/toggle-active')
   @RequirePermission(Permission.STAFF_MANAGE)
   toggleActive(
+    @Request() req,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('membershipId', ParseUUIDPipe) membershipId: string,
   ) {
-    return this.staffService.toggleActive(propertyId, membershipId);
+    return this.staffService.toggleActive(propertyId, membershipId, req.propertyUser);
   }
 
   @Delete(':membershipId')
   @RequirePermission(Permission.STAFF_MANAGE)
   remove(
+    @Request() req,
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('membershipId', ParseUUIDPipe) membershipId: string,
   ) {
-    return this.staffService.removeStaff(propertyId, membershipId);
+    return this.staffService.removeStaff(propertyId, membershipId, req.propertyUser);
   }
 }

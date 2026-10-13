@@ -70,6 +70,15 @@ export default function FrontdeskPage() {
 
   const [showAddCharge, setShowAddCharge] = useState(false);
   const [chargeForm, setChargeForm] = useState({ category: 'minibar', description: '', amount: 0, quantity: 1, notes: '' });
+  const [showHKRequest, setShowHKRequest] = useState(false);
+  const [hkForm, setHKForm] = useState({ title: '', priority: 'normal', notes: '' });
+  const [hkSubmitting, setHKSubmitting] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [actionSuccess, setActionSuccess] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const showSuccess = (msg: string) => { setActionSuccess(msg); setTimeout(() => setActionSuccess(''), 3000); };
+  const showError = (msg: string) => { setActionError(msg); setTimeout(() => setActionError(''), 5000); };
 
   const loadBoard = async () => {
     if (!property) return;
@@ -78,7 +87,9 @@ export default function FrontdeskPage() {
       const res = await api.get<Board>(`/properties/${property.id}/frontdesk/today`);
       const r = res as any;
       setBoard(r?.data || r);
-    } catch {}
+    } catch (err: any) {
+      showError(err.message || 'Failed to load front desk board');
+    }
     setLoading(false);
   };
 
@@ -90,7 +101,9 @@ export default function FrontdeskPage() {
       const data = (res as any)?.data || res;
       setFolioItems(data.items || []);
       setFolioSummary(data.summary || { totalCharges: 0, totalCredits: 0, balance: 0 });
-    } catch {}
+    } catch (err: any) {
+      showError(err.message || 'Failed to load folio');
+    }
     setLoadingFolio(false);
   };
 
@@ -115,7 +128,10 @@ export default function FrontdeskPage() {
       setShowAddCharge(false);
       setChargeForm({ category: 'minibar', description: '', amount: 0, quantity: 1, notes: '' });
       loadFolio(selectedBooking.id);
-    } catch {}
+      showSuccess('Charge added');
+    } catch (err: any) {
+      showError(err.message || 'Failed to add charge');
+    }
   };
 
   const deleteItem = async (itemId: string) => {
@@ -123,7 +139,11 @@ export default function FrontdeskPage() {
     try {
       await api.delete(`/properties/${property.id}/frontdesk/folio/${itemId}`);
       loadFolio(selectedBooking.id);
-    } catch {}
+      showSuccess('Item removed');
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete item');
+    }
+    setConfirmDelete(null);
   };
 
   const postRoomCharges = async () => {
@@ -131,7 +151,10 @@ export default function FrontdeskPage() {
     try {
       await api.post(`/properties/${property.id}/frontdesk/folio/${selectedBooking.id}/post-room-charges`);
       loadFolio(selectedBooking.id);
-    } catch {}
+      showSuccess('Room charges posted');
+    } catch (err: any) {
+      showError(err.message || 'Failed to post room charges');
+    }
   };
 
 
@@ -165,6 +188,8 @@ export default function FrontdeskPage() {
 
   return (
     <div className="space-y-6">
+      {actionError && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{actionError}</div>}
+      {actionSuccess && <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{actionSuccess}</div>}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <DoorOpen className="w-6 h-6 text-blue-600" /> Front Desk
@@ -284,6 +309,12 @@ export default function FrontdeskPage() {
                 >
                   <Plus className="w-3.5 h-3.5" /> Add Charge
                 </button>
+                <button
+                  onClick={() => { setHKForm({ title: '', priority: 'normal', notes: '' }); setShowHKRequest(true); }}
+                  className="flex items-center gap-1 py-2 px-3 border border-amber-300 text-amber-700 rounded-xl text-xs font-medium hover:bg-amber-50 transition"
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5" /> HK Request
+                </button>
               </div>
 
               {/* Folio items */}
@@ -306,7 +337,7 @@ export default function FrontdeskPage() {
                         <span className={`font-medium ${item.is_credit ? 'text-green-600' : 'text-slate-900'}`}>
                           {item.is_credit ? '-' : ''}{formatCurrency(item.total)}
                         </span>
-                        <button onClick={() => deleteItem(item.id)} className="p-1 text-slate-400 hover:text-red-500">
+                        <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(item.id); }} className="p-1 text-slate-400 hover:text-red-500">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -361,6 +392,97 @@ export default function FrontdeskPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Folio Item Confirmation */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 mx-4">
+            <h3 className="font-semibold text-slate-900 mb-2">Remove Item</h3>
+            <p className="text-sm text-slate-500 mb-4">Are you sure you want to remove this folio item? This cannot be undone.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium hover:bg-slate-50">Cancel</button>
+              <button onClick={() => deleteItem(confirmDelete)} className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Housekeeping Request Modal */}
+      {showHKRequest && selectedBooking && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 mx-4 space-y-4">
+            <h3 className="font-semibold text-slate-900">Housekeeping Request</h3>
+            <p className="text-sm text-slate-500">
+              Room {selectedBooking.room} — {selectedBooking.guestName}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Request</label>
+                <input
+                  value={hkForm.title}
+                  onChange={(e) => setHKForm({ ...hkForm, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Extra towels, room refresh, spill cleanup"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+                <select
+                  value={hkForm.priority}
+                  onChange={(e) => setHKForm({ ...hkForm, priority: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="low">Low</option>
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                <textarea
+                  value={hkForm.notes}
+                  onChange={(e) => setHKForm({ ...hkForm, notes: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
+                  placeholder="Any extra details..."
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!property || !hkForm.title.trim()) return;
+                  setHKSubmitting(true);
+                  try {
+                    await api.post(`/properties/${property.id}/housekeeping`, {
+                      task_type: 'custom',
+                      title: hkForm.title,
+                      notes: hkForm.notes || undefined,
+                      priority: hkForm.priority,
+                      due_date: new Date().toISOString().slice(0, 10),
+                      booking_id: selectedBooking.id,
+                    });
+                    setShowHKRequest(false);
+                    showSuccess('Housekeeping task created');
+                  } catch (err: any) {
+                    showError(err.message || 'Failed to create housekeeping task');
+                  }
+                  setHKSubmitting(false);
+                }}
+                disabled={hkSubmitting || !hkForm.title.trim()}
+                className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition"
+              >
+                {hkSubmitting ? 'Creating...' : 'Create Task'}
+              </button>
+              <button
+                onClick={() => setShowHKRequest(false)}
+                className="px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium hover:bg-slate-50"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

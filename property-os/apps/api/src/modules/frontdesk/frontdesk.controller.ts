@@ -28,8 +28,11 @@ export class FrontdeskController {
 
   @Get('folio/:bookingId')
   @RequirePermission(Permission.FRONTDESK_VIEW)
-  getFolio(@Param('bookingId', new ParseUUIDPipe()) bookingId: string) {
-    return this.frontdesk.getBookingFolio(bookingId);
+  getFolio(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
+    @Param('bookingId', new ParseUUIDPipe()) bookingId: string,
+  ) {
+    return this.frontdesk.getBookingFolio(bookingId, propertyId);
   }
 
   @Post('folio')
@@ -45,8 +48,11 @@ export class FrontdeskController {
 
   @Delete('folio/:itemId')
   @RequirePermission(Permission.FRONTDESK_MANAGE)
-  deleteFolioItem(@Param('itemId', new ParseUUIDPipe()) itemId: string) {
-    return this.frontdesk.deleteFolioItem(itemId);
+  deleteFolioItem(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+  ) {
+    return this.frontdesk.deleteFolioItem(itemId, propertyId);
   }
 
   @Post('folio/:bookingId/post-room-charges')

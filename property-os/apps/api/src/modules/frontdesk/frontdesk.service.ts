@@ -91,9 +91,14 @@ export class FrontdeskService {
 
   // --- Folio ---
 
-  async getBookingFolio(bookingId: string) {
+  async getBookingFolio(bookingId: string, propertyId: string) {
+    const booking = await this.bookingsRepo.findOne({
+      where: { id: bookingId, property_id: propertyId },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+
     const items = await this.folioRepo.find({
-      where: { booking_id: bookingId },
+      where: { booking_id: bookingId, property_id: propertyId },
       order: { created_at: 'ASC' },
     });
 
@@ -111,7 +116,9 @@ export class FrontdeskService {
   }
 
   async addFolioItem(propertyId: string, dto: AddFolioItemDto, postedBy?: string) {
-    const booking = await this.bookingsRepo.findOne({ where: { id: dto.bookingId } });
+    const booking = await this.bookingsRepo.findOne({
+      where: { id: dto.bookingId, property_id: propertyId },
+    });
     if (!booking) throw new NotFoundException('Booking not found');
 
     const quantity = dto.quantity ?? 1;
@@ -135,8 +142,10 @@ export class FrontdeskService {
     return this.folioRepo.save(item);
   }
 
-  async deleteFolioItem(itemId: string) {
-    const item = await this.folioRepo.findOne({ where: { id: itemId } });
+  async deleteFolioItem(itemId: string, propertyId: string) {
+    const item = await this.folioRepo.findOne({
+      where: { id: itemId, property_id: propertyId },
+    });
     if (!item) throw new NotFoundException('Folio item not found');
     await this.folioRepo.remove(item);
     return { deleted: true };
@@ -144,7 +153,7 @@ export class FrontdeskService {
 
   async autoPostRoomCharges(bookingId: string, propertyId: string) {
     const booking = await this.bookingsRepo.findOne({
-      where: { id: bookingId },
+      where: { id: bookingId, property_id: propertyId },
       relations: ['room', 'room.room_type'],
     });
     if (!booking) throw new NotFoundException('Booking not found');

@@ -62,6 +62,7 @@ export default function GuestsPage() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '', phone: '', country: '', notes: '' });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -115,13 +116,14 @@ export default function GuestsPage() {
   const saveGuest = async () => {
     if (!selectedGuest) return;
     setSaving(true);
+    setSaveError('');
     try {
       await api.patch(`/properties/${property!.id}/guests/${selectedGuest.id}`, editForm);
       setEditing(false);
       await openDetail(selectedGuest.id);
       await fetchGuests();
-    } catch {
-      // keep editing open
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save guest');
     } finally {
       setSaving(false);
     }
@@ -303,6 +305,7 @@ export default function GuestsPage() {
                   </div>
 
                   <div className="space-y-2 text-sm">
+                    {saveError && <div className="p-3 rounded-lg bg-danger/10 text-danger text-sm mb-3">{saveError}</div>}
                     {editing ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">

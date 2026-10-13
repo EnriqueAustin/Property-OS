@@ -18,7 +18,15 @@ interface PropertyInfo {
   location: string;
   checkInTime: string;
   checkOutTime: string;
+  bookingMode: 'hotel' | 'guesthouse';
   roomTypes: RoomType[];
+}
+
+interface IndividualRoom {
+  id: string;
+  name: string;
+  floor: string | null;
+  photos: string[];
 }
 
 interface AvailableRoom {
@@ -26,10 +34,12 @@ interface AvailableRoom {
   roomTypeName: string;
   description: string;
   amenities: string[];
+  photos: string[];
   nightlyRate: number;
   totalPrice: number;
   availableCount: number;
   maxOccupancy: number;
+  rooms: IndividualRoom[];
 }
 
 interface AvailabilityResult {
@@ -68,6 +78,7 @@ export class BookingWidget extends LitElement {
   @state() private _searching = false;
   @state() private _availability: AvailabilityResult | null = null;
   @state() private _selectedRoom: AvailableRoom | null = null;
+  @state() private _selectedRoomId: string | null = null;
   @state() private _firstName = '';
   @state() private _lastName = '';
   @state() private _email = '';
@@ -138,7 +149,9 @@ export class BookingWidget extends LitElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           propertySlug: this.slug,
-          roomTypeId: this._selectedRoom.roomTypeId,
+          ...(this._selectedRoomId
+            ? { roomId: this._selectedRoomId }
+            : { roomTypeId: this._selectedRoom.roomTypeId }),
           checkIn: this._checkIn,
           checkOut: this._checkOut,
           guestCount: this._guests,
@@ -273,8 +286,15 @@ export class BookingWidget extends LitElement {
     `;
   }
 
+  private _selectRoom(room: AvailableRoom, roomId?: string) {
+    this._selectedRoom = room;
+    this._selectedRoomId = roomId || null;
+    this._step = 'details';
+  }
+
   private _renderRooms() {
     const a = this._availability!;
+    const isGuesthouse = this._property?.bookingMode === 'guesthouse';
     return html`
       <button class="btn-link" @click=${() => { this._step = 'dates'; }}>← Change dates</button>
       <div class="summary-bar" style="margin-top: 8px">
@@ -284,31 +304,54 @@ export class BookingWidget extends LitElement {
       </div>
       ${a.availableRooms.length === 0
         ? html`<div class="empty-state">No rooms available for the selected dates. Try different dates.</div>`
-        : a.availableRooms.map(room => html`
-            <div class="room-card">
-              <div class="room-card-inner">
-                <div class="room-info">
-                  <h3>${room.roomTypeName}</h3>
-                  ${room.description ? html`<div class="desc">${room.description}</div>` : nothing}
-                  <div class="meta">Max ${room.maxOccupancy} guests</div>
-                  ${room.amenities.length > 0 ? html`
-                    <div class="amenities">
-                      ${room.amenities.map(am => html`<span class="amenity-tag">✓ ${am}</span>`)}
+        : isGuesthouse
+          ? a.availableRooms.flatMap(roomType =>
+              (roomType.rooms || []).map(individual => html`
+                <div class="room-card">
+                  <div class="room-card-inner">
+                    <div class="room-info">
+                      <h3>${individual.name}</h3>
+                      <div class="desc">${roomType.roomTypeName}</div>
+                      ${individual.floor ? html`<div class="desc">Floor ${individual.floor}</div>` : nothing}
+                      <div class="meta">Max ${roomType.maxOccupancy} guests</div>
+                      ${roomType.amenities.length > 0 ? html`
+                        <div class="amenities">
+                          ${roomType.amenities.map(am => html`<span class="amenity-tag">✓ ${am}</span>`)}
+                        </div>
+                      ` : nothing}
                     </div>
-                  ` : nothing}
+                    <div class="room-pricing">
+                      <div class="per-night">R ${roomType.nightlyRate.toLocaleString()} / night</div>
+                      <div class="total">R ${roomType.totalPrice.toLocaleString()}</div>
+                      <div class="total-label">total for ${a.nights} night${a.nights > 1 ? 's' : ''}</div>
+                      <button class="btn btn-primary" style="padding: 8px 16px; font-size: 13px" @click=${() => this._selectRoom(roomType, individual.id)}>Book this room</button>
+                    </div>
+                  </div>
                 </div>
-                <div class="room-pricing">
-                  <div class="per-night">R ${room.nightlyRate.toLocaleString()} / night</div>
-                  <div class="total">R ${room.totalPrice.toLocaleString()}</div>
-                  <div class="total-label">total for ${a.nights} night${a.nights > 1 ? 's' : ''}</div>
-                  <button class="btn btn-primary" style="padding: 8px 16px; font-size: 13px" @click=${() => {
-                    this._selectedRoom = room;
-                    this._step = 'details';
-                  }}>Select</button>
+              `)
+            )
+          : a.availableRooms.map(room => html`
+              <div class="room-card">
+                <div class="room-card-inner">
+                  <div class="room-info">
+                    <h3>${room.roomTypeName}</h3>
+                    ${room.description ? html`<div class="desc">${room.description}</div>` : nothing}
+                    <div class="meta">Max ${room.maxOccupancy} guests</div>
+                    ${room.amenities.length > 0 ? html`
+                      <div class="amenities">
+                        ${room.amenities.map(am => html`<span class="amenity-tag">✓ ${am}</span>`)}
+                      </div>
+                    ` : nothing}
+                  </div>
+                  <div class="room-pricing">
+                    <div class="per-night">R ${room.nightlyRate.toLocaleString()} / night</div>
+                    <div class="total">R ${room.totalPrice.toLocaleString()}</div>
+                    <div class="total-label">total for ${a.nights} night${a.nights > 1 ? 's' : ''}</div>
+                    <button class="btn btn-primary" style="padding: 8px 16px; font-size: 13px" @click=${() => this._selectRoom(room)}>Select</button>
+                  </div>
                 </div>
               </div>
-            </div>
-          `)
+            `)
       }
     `;
   }
@@ -321,7 +364,9 @@ export class BookingWidget extends LitElement {
     return html`
       <button class="btn-link" @click=${() => { this._step = 'rooms'; }}>← Change room</button>
       <div class="booking-summary" style="margin-top: 8px">
-        <div class="room-name">${room.roomTypeName}</div>
+        <div class="room-name">${this._selectedRoomId
+          ? `${room.rooms?.find(r => r.id === this._selectedRoomId)?.name || ''} — ${room.roomTypeName}`
+          : room.roomTypeName}</div>
         <div class="dates">${a.checkIn} → ${a.checkOut} · ${a.nights} night${a.nights > 1 ? 's' : ''}</div>
         <div class="price">Total: R ${room.totalPrice.toLocaleString()}</div>
       </div>

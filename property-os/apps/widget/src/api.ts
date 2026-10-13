@@ -14,7 +14,15 @@ export interface PropertyInfo {
   location: string;
   checkInTime: string;
   checkOutTime: string;
+  bookingMode: 'hotel' | 'guesthouse';
   roomTypes: RoomType[];
+}
+
+export interface IndividualRoom {
+  id: string;
+  name: string;
+  floor: string | null;
+  photos: string[];
 }
 
 export interface AvailableRoom {
@@ -22,10 +30,12 @@ export interface AvailableRoom {
   roomTypeName: string;
   description: string;
   amenities: string[];
+  photos: string[];
   nightlyRate: number;
   totalPrice: number;
   availableCount: number;
   maxOccupancy: number;
+  rooms: IndividualRoom[];
 }
 
 export interface AvailabilityResult {
@@ -45,7 +55,10 @@ export interface GuestDetails {
   firstName: string;
   lastName: string;
   email: string;
+  emailConfirm?: string;
   phone: string;
+  idNumber?: string;
+  arrivalTime?: string;
   specialRequests?: string;
 }
 
@@ -75,7 +88,8 @@ export class Api {
 
   async createBooking(params: {
     propertySlug: string;
-    roomTypeId: string;
+    roomTypeId?: string;
+    roomId?: string;
     checkIn: string;
     checkOut: string;
     guestCount: number;
@@ -87,7 +101,7 @@ export class Api {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         propertySlug: params.propertySlug,
-        roomTypeId: params.roomTypeId,
+        ...(params.roomId ? { roomId: params.roomId } : { roomTypeId: params.roomTypeId }),
         checkIn: params.checkIn,
         checkOut: params.checkOut,
         guestCount: params.guestCount,

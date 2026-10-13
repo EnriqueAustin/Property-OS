@@ -26,6 +26,7 @@ export default function RefundsPage() {
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState('');
 
   const fetchRefunds = () => {
     if (!property) return;
@@ -37,7 +38,7 @@ export default function RefundsPage() {
         setRefunds(res.data || []);
         setMeta(res.meta || { page: 1, totalPages: 1, total: 0 });
       })
-      .catch(() => {})
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load refunds'); })
       .finally(() => setLoading(false));
   };
 
@@ -79,6 +80,8 @@ export default function RefundsPage() {
           <p className="text-sm text-muted mt-1">Review, approve, and process refund requests.</p>
         </div>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       <div className="mb-6">
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="px-3 py-2 border border-border rounded-lg text-sm">

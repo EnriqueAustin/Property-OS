@@ -149,7 +149,7 @@ describe('GuestsService', () => {
       mockGuestsRepo.findOne.mockResolvedValue(mockGuest);
       mockBookingsRepo.find.mockResolvedValue([mockBooking]);
 
-      const result = await service.getGuest('guest-1');
+      const result = await service.getGuest('guest-1', 'prop-1');
 
       expect(result.id).toBe('guest-1');
       expect(result.bookings).toHaveLength(1);
@@ -160,7 +160,7 @@ describe('GuestsService', () => {
     it('should throw NotFoundException for unknown guest', async () => {
       mockGuestsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.getGuest('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.getGuest('unknown', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -170,7 +170,7 @@ describe('GuestsService', () => {
       mockGuestsRepo.findOne.mockResolvedValue({ ...mockGuest });
       mockGuestsRepo.save.mockResolvedValue(updated);
 
-      const result = await service.updateGuest('guest-1', { phone: '+27829999999' });
+      const result = await service.updateGuest('guest-1', { phone: '+27829999999' }, 'prop-1');
 
       expect(result.phone).toBe('+27829999999');
     });
@@ -179,7 +179,7 @@ describe('GuestsService', () => {
       mockGuestsRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.updateGuest('unknown', { phone: '+27829999999' }),
+        service.updateGuest('unknown', { phone: '+27829999999' }, 'prop-1'),
       ).rejects.toThrow(NotFoundException);
     });
   });

@@ -46,7 +46,7 @@ export default function TourismLevyPage() {
       ]);
       if (settingsData) setSettings(settingsData);
       setMonthlyReport(Array.isArray(reportData) ? reportData : []);
-    } catch { /* empty */ } finally {
+    } catch (err: any) { setError(err.message || 'Failed to load tourism levy data'); } finally {
       setLoading(false);
     }
   };

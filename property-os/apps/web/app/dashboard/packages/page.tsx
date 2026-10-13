@@ -44,13 +44,14 @@ export default function PackagesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   const fetchPackages = async () => {
     if (!property) return;
     try {
       const data = await api.get<PackageItem[]>(`/properties/${property.id}/packages`);
       setPackages(Array.isArray(data) ? data : []);
-    } catch { /* empty */ } finally {
+    } catch (err: any) { setFetchError(err.message || 'Failed to load packages'); } finally {
       setLoading(false);
     }
   };
@@ -129,6 +130,8 @@ export default function PackagesPage() {
           <Plus size={16} /> New Package
         </button>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {showForm && (
         <div className="bg-white rounded-xl border border-border p-6 mb-6 shadow-sm">

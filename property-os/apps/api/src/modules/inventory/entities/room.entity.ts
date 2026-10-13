@@ -41,6 +41,9 @@ export class Room {
   @Column({ type: 'int', default: 0 })
   sort_order: number;
 
+  @Column({ type: 'jsonb', default: '[]' })
+  photos: string[];
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
 

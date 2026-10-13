@@ -61,6 +61,29 @@ export default function OnboardingPage() {
     checkOutTime: '10:00',
   });
 
+  const [propertyPhotos, setPropertyPhotos] = useState<string[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  const UPLOADS_URL = API_BASE.replace('/api', '/uploads');
+
+  const uploadPropertyPhoto = async (files: FileList) => {
+    if (!property || !files.length) return;
+    setUploadingPhotos(true);
+    const formData = new FormData();
+    Array.from(files).forEach((f) => formData.append('files', f));
+    try {
+      const token = localStorage.getItem('pos_token');
+      const res = await fetch(`${API_BASE}/properties/${property.id}/photos`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      setPropertyPhotos(data.photos || []);
+    } catch (err: any) { setError(err.message || 'Failed to upload photos'); }
+    setUploadingPhotos(false);
+  };
+
   // Step 2: Room types
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [rtForm, setRtForm] = useState({
@@ -97,7 +120,7 @@ export default function OnboardingPage() {
         `/properties/${property.id}/rooms`,
       );
       setRooms(Array.isArray(rs) ? rs : rs.data || []);
-    } catch {}
+    } catch (err: any) { setError(err.message || 'Failed to load existing data'); }
   };
 
   const saveProperty = async () => {
@@ -322,6 +345,33 @@ export default function OnboardingPage() {
               />
             </div>
           </div>
+
+          {/* Property Photos */}
+          {property && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Property Photos</label>
+              <p className="text-xs text-slate-500 mb-3">Upload cover images shown on your booking page. You can add more later in Settings.</p>
+              {propertyPhotos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {propertyPhotos.map((p) => (
+                    <div key={p} className="w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
+                      <img src={p.startsWith('http') ? p : `${UPLOADS_URL}/${p}`} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium cursor-pointer transition">
+                <Plus className="w-4 h-4" /> {uploadingPhotos ? 'Uploading...' : 'Add Photos'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => e.target.files && uploadPropertyPhoto(e.target.files)}
+                />
+              </label>
+            </div>
+          )}
 
           <div className="flex justify-end pt-2">
             <button

@@ -3,13 +3,14 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource, Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomInt } from 'crypto';
 import { Booking, BookingSource, BookingStatus } from './entities/booking.entity';
 import { Guest } from './entities/guest.entity';
 import { RoomAvailability, AvailabilityStatus } from '../inventory/entities/room-availability.entity';
@@ -31,6 +32,7 @@ import {
 } from './events/booking.events';
 import { PricingService } from '../pricing/pricing.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { RatePlansService } from '../inventory/rate-plans.service';
 import { PromosService } from '../promos/promos.service';
 import { TourismLevyService } from '../tourism-levy/tourism-levy.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -47,6 +49,8 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     @InjectRepository(Booking)
     private bookingsRepo: Repository<Booking>,
@@ -64,6 +68,7 @@ export class BookingsService {
     private eventEmitter: EventEmitter2,
     private pricingService: PricingService,
     private inventoryService: InventoryService,
+    private ratePlansService: RatePlansService,
     private promosService: PromosService,
     private tourismLevyService: TourismLevyService,
     @Inject(forwardRef(() => PaymentsService))
@@ -226,35 +231,51 @@ export class BookingsService {
     });
     if (!property) throw new NotFoundException('Property not found');
 
-    // Normalize: support both single roomTypeId and rooms array
-    const roomSelections = dto.rooms?.length
-      ? dto.rooms
-      : dto.roomTypeId
-        ? [{ roomTypeId: dto.roomTypeId, guestCount: dto.guestCount }]
-        : (() => { throw new BadRequestException('Either roomTypeId or rooms must be provided'); })();
-
-    // Validate all room types and find best available rooms
+    // Guesthouse mode: guest picked a specific room
+    // Hotel mode: guest picked a room type, system auto-assigns
     const resolvedRooms: { roomId: string; roomTypeId: string; guestCount?: number }[] = [];
     const usedRoomIds = new Set<string>();
 
-    for (const sel of roomSelections) {
-      const roomType = await this.roomTypesRepo.findOne({ where: { id: sel.roomTypeId } });
-      if (!roomType) throw new NotFoundException(`Room type ${sel.roomTypeId} not found`);
-      if (sel.guestCount && sel.guestCount > roomType.max_occupancy) {
-        throw new BadRequestException(
-          `Guest count (${sel.guestCount}) exceeds ${roomType.name} max occupancy (${roomType.max_occupancy})`,
-        );
-      }
+    if (dto.roomId) {
+      const room = await this.roomsRepo.findOne({
+        where: { id: dto.roomId, property_id: property.id, is_active: true },
+      });
+      if (!room) throw new NotFoundException('Room not found');
+      const blocked = await this.availabilityRepo
+        .createQueryBuilder('a')
+        .where('a.room_id = :roomId', { roomId: room.id })
+        .andWhere('a.date >= :start AND a.date < :end', { start: dto.checkIn, end: dto.checkOut })
+        .andWhere('a.status != :avail', { avail: AvailabilityStatus.AVAILABLE })
+        .getCount();
+      if (blocked > 0) throw new ConflictException('This room is not available for the selected dates');
+      resolvedRooms.push({ roomId: room.id, roomTypeId: room.room_type_id, guestCount: dto.guestCount });
+    } else {
+      // Normalize: support both single roomTypeId and rooms array
+      const roomSelections = dto.rooms?.length
+        ? dto.rooms
+        : dto.roomTypeId
+          ? [{ roomTypeId: dto.roomTypeId, guestCount: dto.guestCount }]
+          : (() => { throw new BadRequestException('Either roomTypeId, roomId, or rooms must be provided'); })();
 
-      const room = await this.findBestAvailableRoom(
-        property.id,
-        sel.roomTypeId,
-        dto.checkIn,
-        dto.checkOut,
-        usedRoomIds,
-      );
-      usedRoomIds.add(room.id);
-      resolvedRooms.push({ roomId: room.id, roomTypeId: sel.roomTypeId, guestCount: sel.guestCount });
+      for (const sel of roomSelections) {
+        const roomType = await this.roomTypesRepo.findOne({ where: { id: sel.roomTypeId } });
+        if (!roomType) throw new NotFoundException(`Room type ${sel.roomTypeId} not found`);
+        if (sel.guestCount && sel.guestCount > roomType.max_occupancy) {
+          throw new BadRequestException(
+            `Guest count (${sel.guestCount}) exceeds ${roomType.name} max occupancy (${roomType.max_occupancy})`,
+          );
+        }
+
+        const room = await this.findBestAvailableRoom(
+          property.id,
+          sel.roomTypeId,
+          dto.checkIn,
+          dto.checkOut,
+          usedRoomIds,
+        );
+        usedRoomIds.add(room.id);
+        resolvedRooms.push({ roomId: room.id, roomTypeId: sel.roomTypeId, guestCount: sel.guestCount });
+      }
     }
 
     const isMultiRoom = resolvedRooms.length > 1;
@@ -344,11 +365,14 @@ export class BookingsService {
           }
         }
       }
-    } catch {}
+    } catch (e) {
+      this.logger.warn(`Tourism levy calculation failed for booking: ${e}`);
+    }
 
     const grandTotal = bookings.reduce((sum, b) => sum + Number(b.total_price), 0);
+    const pct = Math.max(0, Math.min(100, Number(property.deposit_percentage) || 0));
     const depositAmount = needsDeposit
-      ? Math.round(grandTotal * Number(property.deposit_percentage)) / 100
+      ? Math.round((grandTotal * pct) / 100)
       : 0;
 
     if (isMultiRoom) {
@@ -430,12 +454,14 @@ export class BookingsService {
       totalPrice: number;
       availableCount: number;
       maxOccupancy: number;
+      rooms: Array<{ id: string; name: string; floor: string | null; photos: string[] }>;
     }> = [];
 
     for (const rt of filteredTypes) {
-      const availableCount = rt.rooms
+      const availableRooms = rt.rooms
         .filter((r) => r.is_active)
-        .filter((r) => !blockedRoomIds.has(r.id)).length;
+        .filter((r) => !blockedRoomIds.has(r.id));
+      const availableCount = availableRooms.length;
 
       if (availableCount > 0) {
         const restrictions = await this.inventoryService.getYieldRestrictions(
@@ -484,6 +510,12 @@ export class BookingsService {
           totalPrice,
           availableCount,
           maxOccupancy: rt.max_occupancy,
+          rooms: availableRooms.map((r) => ({
+            id: r.id,
+            name: r.name,
+            floor: r.floor,
+            photos: r.photos || [],
+          })),
         });
       }
     }
@@ -542,17 +574,57 @@ export class BookingsService {
         .join(', '),
       checkInTime: property.check_in_time,
       checkOutTime: property.check_out_time,
+      bookingMode: property.booking_mode || 'hotel',
       googleAnalyticsId: property.google_analytics_id || null,
+      depositRequired: property.deposit_required || false,
+      depositPercentage: property.deposit_required ? Number(property.deposit_percentage) : 0,
+      cancellationPolicy: property.cancellation_policy || null,
+      currency: property.currency || 'ZAR',
+      maxOccupancyLimit: Math.max(...roomTypes.map((rt) => rt.max_occupancy), 1),
       roomTypes: roomTypes.map((rt) => ({
         id: rt.id,
         name: rt.name,
         description: rt.description,
         basePrice: Number(rt.base_price),
         maxOccupancy: rt.max_occupancy,
+        baseOccupancy: rt.base_occupancy || rt.max_occupancy,
+        childRate: rt.child_rate ? Number(rt.child_rate) : null,
+        extraPersonRate: rt.extra_person_rate ? Number(rt.extra_person_rate) : null,
         photos: rt.photos || [],
         amenities: rt.amenities.map((a) => a.amenity),
       })),
     };
+  }
+
+  async getPublicRatePlans(slug: string) {
+    const property = await this.propertiesRepo.findOne({
+      where: { slug, is_active: true },
+    });
+    if (!property) throw new NotFoundException('Property not found');
+
+    const roomTypes = await this.roomTypesRepo.find({
+      where: { property_id: property.id, is_active: true },
+    });
+
+    const result: Record<string, any[]> = {};
+    for (const rt of roomTypes) {
+      const plans = await this.ratePlansService.getActiveForRoomType(property.id, rt.id);
+      if (plans.length > 0) {
+        result[rt.id] = plans.map((rp) => ({
+          id: rp.id,
+          name: rp.name,
+          description: rp.description,
+          priceModifierPercent: Number(rp.price_modifier_percent),
+          cancellationPolicy: rp.cancellation_policy,
+          freeCancellationDays: rp.free_cancellation_days,
+          includesBreakfast: rp.includes_breakfast,
+          includesParking: rp.includes_parking,
+          includesWifi: rp.includes_wifi,
+          inclusions: rp.inclusions || [],
+        }));
+      }
+    }
+    return result;
   }
 
   // -- List bookings --------------------------------------------------------
@@ -602,9 +674,9 @@ export class BookingsService {
 
   // -- Get single booking ---------------------------------------------------
 
-  async getBooking(bookingId: string): Promise<Booking> {
+  async getBooking(bookingId: string, propertyId?: string): Promise<Booking> {
     const booking = await this.bookingsRepo.findOne({
-      where: { id: bookingId },
+      where: { id: bookingId, ...(propertyId ? { property_id: propertyId } : {}) },
       relations: ['guest', 'room', 'room.room_type', 'property'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
@@ -613,9 +685,9 @@ export class BookingsService {
 
   // -- Get booking group ----------------------------------------------------
 
-  async getBookingGroup(groupId: string): Promise<Booking[]> {
+  async getBookingGroup(groupId: string, propertyId?: string): Promise<Booking[]> {
     const bookings = await this.bookingsRepo.find({
-      where: { group_id: groupId },
+      where: { group_id: groupId, ...(propertyId ? { property_id: propertyId } : {}) },
       relations: ['guest', 'room', 'room.room_type', 'property'],
       order: { group_index: 'ASC' },
     });
@@ -625,8 +697,12 @@ export class BookingsService {
 
   // -- Update booking -------------------------------------------------------
 
-  async updateBooking(bookingId: string, dto: UpdateBookingDto): Promise<Booking> {
-    const booking = await this.getBooking(bookingId);
+  async updateBooking(
+    bookingId: string,
+    dto: UpdateBookingDto,
+    propertyId?: string,
+  ): Promise<Booking> {
+    const booking = await this.getBooking(bookingId, propertyId);
     const snapshot = {
       check_in: booking.check_in,
       check_out: booking.check_out,
@@ -711,8 +787,12 @@ export class BookingsService {
 
   // -- Status transitions ---------------------------------------------------
 
-  async updateStatus(bookingId: string, dto: UpdateStatusDto): Promise<Booking> {
-    const booking = await this.getBooking(bookingId);
+  async updateStatus(
+    bookingId: string,
+    dto: UpdateStatusDto,
+    propertyId?: string,
+  ): Promise<Booking> {
+    const booking = await this.getBooking(bookingId, propertyId);
     const oldStatus = booking.status;
     const allowed = VALID_TRANSITIONS[booking.status];
     if (!allowed || !allowed.includes(dto.status)) {
@@ -732,6 +812,18 @@ export class BookingsService {
       );
 
       if (dto.status === BookingStatus.CHECKED_IN) {
+        if (dto.idNumber && booking.guest_id) {
+          try {
+            await this.bookingsRepo.manager.query(
+              `UPDATE guests SET id_number = $1 WHERE id = $2`,
+              [dto.idNumber, booking.guest_id],
+            );
+          } catch (e) { this.logger.warn(`Guest ID update failed (best-effort): ${e}`); }
+        }
+        if (dto.checkInNotes) {
+          booking.internal_notes = [booking.internal_notes, `Check-in: ${dto.checkInNotes}`].filter(Boolean).join('\n');
+          await this.bookingsRepo.save(booking);
+        }
         this.eventEmitter.emit(BOOKING_EVENTS.CHECKED_IN, {
           bookingId: saved.id,
           propertyId: saved.property_id,
@@ -755,8 +847,9 @@ export class BookingsService {
   async cancelBooking(
     bookingId: string,
     dto: CancelBookingDto,
+    propertyId?: string,
   ): Promise<Booking> {
-    const booking = await this.getBooking(bookingId);
+    const booking = await this.getBooking(bookingId, propertyId);
     const allowed = VALID_TRANSITIONS[booking.status];
     if (!allowed || !allowed.includes(BookingStatus.CANCELLED)) {
       throw new BadRequestException(
@@ -794,14 +887,15 @@ export class BookingsService {
   async cancelBookingGroup(
     groupId: string,
     dto: CancelBookingDto,
+    propertyId?: string,
   ): Promise<Booking[]> {
-    const bookings = await this.getBookingGroup(groupId);
+    const bookings = await this.getBookingGroup(groupId, propertyId);
     const results: Booking[] = [];
 
     for (const booking of bookings) {
       const allowed = VALID_TRANSITIONS[booking.status];
       if (allowed && allowed.includes(BookingStatus.CANCELLED)) {
-        const cancelled = await this.cancelBooking(booking.id, dto);
+        const cancelled = await this.cancelBooking(booking.id, dto, booking.property_id);
         results.push(cancelled);
       } else {
         results.push(booking);
@@ -838,7 +932,8 @@ export class BookingsService {
         balance: summary.balance,
         fullyPaid: summary.fullyPaid,
       };
-    } catch {
+    } catch (e) {
+      this.logger.warn(`Payment summary lookup failed, using fallback: ${e}`);
       (base as any).paymentSummary = {
         totalPaid: 0,
         balance: Number(booking.total_price),
@@ -925,12 +1020,18 @@ export class BookingsService {
     }
 
     if (cancelGroup && booking.group_id) {
-      return this.cancelBookingGroup(booking.group_id, {
-        reason: reason || 'Cancelled by guest',
-      });
+      return this.cancelBookingGroup(
+        booking.group_id,
+        { reason: reason || 'Cancelled by guest' },
+        booking.property_id,
+      );
     }
 
-    return this.cancelBooking(booking.id, { reason: reason || 'Cancelled by guest' });
+    return this.cancelBooking(
+      booking.id,
+      { reason: reason || 'Cancelled by guest' },
+      booking.property_id,
+    );
   }
 
   // -- Online check-in (public) ---------------------------------------------
@@ -1045,7 +1146,7 @@ export class BookingsService {
     if (dto.guestCount) updateDto.guestCount = dto.guestCount;
     if (dto.specialRequests !== undefined) updateDto.specialRequests = dto.specialRequests;
 
-    const updated = await this.updateBooking(booking.id, updateDto);
+    const updated = await this.updateBooking(booking.id, updateDto, booking.property_id);
 
     return this.formatBookingForGuest(
       await this.bookingsRepo.findOne({
@@ -1136,7 +1237,7 @@ export class BookingsService {
   private async findOrCreateGuest(
     manager: any,
     propertyId: string,
-    guestDto: { firstName: string; lastName: string; email?: string; phone?: string; country?: string },
+    guestDto: { firstName: string; lastName: string; email?: string; phone?: string; country?: string; idNumber?: string },
   ): Promise<Guest & { isReturning?: boolean }> {
     let existing: Guest | null = null;
 
@@ -1156,6 +1257,7 @@ export class BookingsService {
       if (guestDto.lastName) existing.last_name = guestDto.lastName;
       if (guestDto.phone && !existing.phone) existing.phone = guestDto.phone;
       if (guestDto.country && !existing.country) existing.country = guestDto.country;
+      if (guestDto.idNumber) existing.id_number = guestDto.idNumber;
       await manager.save(existing);
       (existing as any).isReturning = existing.total_stays > 0;
       return existing as Guest & { isReturning?: boolean };
@@ -1168,6 +1270,7 @@ export class BookingsService {
       email: guestDto.email,
       phone: guestDto.phone,
       country: guestDto.country,
+      id_number: guestDto.idNumber,
     });
     const saved = await manager.save(guest);
     (saved as any).isReturning = false;
@@ -1215,15 +1318,28 @@ export class BookingsService {
     throw new ConflictException(`No rooms of type ${roomTypeId} available for the selected dates`);
   }
 
+  // Unambiguous alphabet: no 0/O, no 1/I to avoid transcription errors.
+  private static readonly REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  private randomReference(): string {
+    const alphabet = BookingsService.REF_ALPHABET;
+    const block = () =>
+      Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join('');
+    return `${block()}-${block()}`;
+  }
+
+  // Generates a random, unguessable booking reference (e.g. K7QX-92PM).
+  // Retries on the (extremely unlikely) unique-constraint collision.
   private async generateRefNumber(manager: any): Promise<string> {
-    const year = new Date().getFullYear();
-    const result = await manager.query(
-      `SELECT COALESCE(MAX(CAST(SUBSTRING(reference_number FROM 'POS-\\d{4}-(\\d+)') AS INTEGER)), 0) + 1 AS next_seq
-       FROM bookings WHERE reference_number LIKE $1`,
-      [`POS-${year}-%`],
-    );
-    const seq = (parseInt(result[0].next_seq, 10)).toString().padStart(4, '0');
-    return `POS-${year}-${seq}`;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const ref = this.randomReference();
+      const existing = await manager.query(
+        `SELECT 1 FROM bookings WHERE reference_number = $1 LIMIT 1`,
+        [ref],
+      );
+      if (!existing || existing.length === 0) return ref;
+    }
+    throw new ConflictException('Could not generate a unique booking reference');
   }
 
   private calcNights(checkIn: string, checkOut: string): number {

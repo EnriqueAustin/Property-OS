@@ -36,6 +36,7 @@ export default function RatePlansPage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [fetchError, setFetchError] = useState('');
   const [form, setForm] = useState({
     room_type_id: '',
     name: '',
@@ -57,7 +58,7 @@ export default function RatePlansPage() {
       ]);
       setRoomTypes(Array.isArray(rt) ? rt : []);
       setPlans(Array.isArray(rp) ? rp : []);
-    } catch { /* empty */ } finally {
+    } catch (err: any) { setFetchError(err.message || 'Failed to load rate plans'); } finally {
       setLoading(false);
     }
   };
@@ -121,6 +122,8 @@ export default function RatePlansPage() {
           <Plus size={16} /> New Rate Plan
         </button>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {showForm && (
         <div className="bg-white rounded-xl border border-border p-6 mb-6 shadow-sm">

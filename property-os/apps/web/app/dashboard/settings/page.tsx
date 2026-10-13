@@ -36,6 +36,7 @@ export default function SettingsPage() {
   const [templateVars, setTemplateVars] = useState<Record<string, string[]>>({});
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({ subject: '', bodyHtml: '' });
+  const [fetchError, setFetchError] = useState('');
 
   // Notification settings
   const [notifSettings, setNotifSettings] = useState({
@@ -60,6 +61,7 @@ export default function SettingsPage() {
     name: '', description: '', email: '', phone: '',
     check_in_time: '14:00', check_out_time: '10:00',
     min_stay_nights: 1, deposit_required: false, deposit_percentage: 0,
+    booking_mode: 'hotel',
     cancellation_policy: '',
     google_analytics_id: '',
     wifi_name: '',
@@ -73,6 +75,7 @@ export default function SettingsPage() {
   const [payForm, setPayForm] = useState({
     payfastMerchantId: '', payfastMerchantKey: '', payfastPassphrase: '',
     payfastSandbox: true, payfastEnabled: false,
+    snapscanEnabled: false,
     eftEnabled: false, eftBankName: '', eftAccountHolder: '',
     eftAccountNumber: '', eftBranchCode: '', eftAccountType: 'cheque',
   });
@@ -89,6 +92,7 @@ export default function SettingsPage() {
           min_stay_nights: p.min_stay_nights || 1,
           deposit_required: p.deposit_required || false,
           deposit_percentage: p.deposit_percentage || 0,
+          booking_mode: p.booking_mode || 'hotel',
           cancellation_policy: p.cancellation_policy || '',
           google_analytics_id: p.google_analytics_id || '',
           wifi_name: p.wifi_name || '',
@@ -99,7 +103,7 @@ export default function SettingsPage() {
         });
         setPhotos(p.photos || []);
       })
-      .catch(() => {});
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load property settings'); });
 
     api.get<any>(`/properties/${property.id}/payment-settings`)
       .then((s) => setPayForm({
@@ -108,6 +112,7 @@ export default function SettingsPage() {
         payfastPassphrase: s.payfast_passphrase || '',
         payfastSandbox: s.payfast_sandbox ?? true,
         payfastEnabled: s.payfast_enabled ?? false,
+        snapscanEnabled: s.snapscan_enabled ?? false,
         eftEnabled: s.eft_enabled ?? false,
         eftBankName: s.eft_bank_name || '',
         eftAccountHolder: s.eft_account_holder || '',
@@ -115,7 +120,7 @@ export default function SettingsPage() {
         eftBranchCode: s.eft_branch_code || '',
         eftAccountType: s.eft_account_type || 'cheque',
       }))
-      .catch(() => {});
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load payment settings'); });
 
     api.get<any>(`/properties/${property.id}/settings/notifications`)
       .then((s) => setNotifSettings({
@@ -134,15 +139,15 @@ export default function SettingsPage() {
         wifi_password: s.wifi_password || '',
         directions: s.directions || '',
       }))
-      .catch(() => {});
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load notification settings'); });
 
     api.get<EmailTemplateRecord[]>(`/properties/${property.id}/email-templates`)
       .then((t) => setTemplates(Array.isArray(t) ? t : []))
-      .catch(() => {});
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load email templates'); });
 
     api.get<Record<string, string[]>>(`/properties/${property.id}/email-templates/variables`)
       .then((v) => setTemplateVars(v || {}))
-      .catch(() => {});
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load template variables'); });
   }, [property]);
 
   const saveProperty = async () => {
@@ -234,6 +239,7 @@ export default function SettingsPage() {
     <div className="max-w-3xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Settings</h2>
 
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
       {message && (
         <div className="mb-4 p-3 rounded-lg bg-accent/10 text-accent text-sm">{message}</div>
       )}
@@ -287,6 +293,22 @@ export default function SettingsPage() {
           <div>
             <label className={labelClass}>Min Stay (nights)</label>
             <input type="number" min={1} value={propForm.min_stay_nights} onChange={(e) => setPropForm({ ...propForm, min_stay_nights: Number(e.target.value) })} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Booking Mode</label>
+            <select
+              value={propForm.booking_mode}
+              onChange={(e) => setPropForm({ ...propForm, booking_mode: e.target.value })}
+              className={inputClass}
+            >
+              <option value="hotel">Hotel / Lodge — system assigns rooms automatically</option>
+              <option value="guesthouse">Guesthouse / B&B — guests pick their specific room</option>
+            </select>
+            <p className="text-xs text-muted mt-1">
+              {propForm.booking_mode === 'hotel'
+                ? 'Guests choose a room type (e.g. "Deluxe Double") and the system assigns the best available room.'
+                : 'Guests browse individual rooms with photos and select exactly which room they want to stay in.'}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <input type="checkbox" checked={propForm.deposit_required} onChange={(e) => setPropForm({ ...propForm, deposit_required: e.target.checked })} className="rounded" />
@@ -369,6 +391,16 @@ export default function SettingsPage() {
                 <input type="password" value={payForm.payfastPassphrase} onChange={(e) => setPayForm({ ...payForm, payfastPassphrase: e.target.value })} className={inputClass} />
               </div>
             </div>
+          </div>
+
+          {/* SnapScan */}
+          <div className="bg-white rounded-xl border border-border shadow-sm p-6">
+            <h3 className="font-semibold mb-4">SnapScan</h3>
+            <div className="flex items-center gap-3 mb-2">
+              <input type="checkbox" checked={payForm.snapscanEnabled} onChange={(e) => setPayForm({ ...payForm, snapscanEnabled: e.target.checked })} className="rounded" />
+              <label className="text-sm font-medium">Enable SnapScan</label>
+            </div>
+            <p className="text-xs text-muted">SnapScan payments are processed via PayFast. Ensure PayFast is enabled and configured above.</p>
           </div>
 
           {/* EFT */}

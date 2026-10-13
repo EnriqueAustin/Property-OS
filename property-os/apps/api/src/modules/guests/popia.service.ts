@@ -5,15 +5,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { Cron } from '@nestjs/schedule';
+import { createHash, randomBytes } from 'crypto';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import {
   GuestConsent,
   ConsentStatus,
   ConsentType,
 } from './entities/guest-consent.entity';
 import { DataRetentionSettings } from './entities/data-retention-settings.entity';
+import {
+  ErasureRequest,
+  ErasureRequestStatus,
+} from './entities/erasure-request.entity';
 import { Guest } from '../bookings/entities/guest.entity';
 import { Booking } from '../bookings/entities/booking.entity';
+import { EmailProvider } from '../notifications/providers/email.provider';
+import { erasureConfirmationEmail } from '../notifications/templates/email.templates';
+import { safeUrl } from '../notifications/templates/html-escape.util';
 
 @Injectable()
 export class PopiaService {
@@ -28,7 +38,22 @@ export class PopiaService {
     private guestsRepo: Repository<Guest>,
     @InjectRepository(Booking)
     private bookingsRepo: Repository<Booking>,
+    @InjectRepository(ErasureRequest)
+    private erasureRepo: Repository<ErasureRequest>,
+    private readonly emailProvider: EmailProvider,
+    private readonly config: ConfigService,
   ) {}
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private get graceDays(): number {
+    return parseInt(
+      this.config.get<string>('POPIA_ERASURE_GRACE_DAYS') ?? '7',
+      10,
+    );
+  }
 
   async grantConsent(
     referenceNumber: string,
@@ -113,6 +138,12 @@ export class PopiaService {
     return { message: 'Consent withdrawn successfully' };
   }
 
+  /**
+   * Step 1 of erasure (audit S5): validate ownership, then email a confirmation
+   * link containing a random token (stored only as a hash, 24h expiry). Nothing
+   * is anonymised here — merely holding the original request email is no longer
+   * enough to erase a guest.
+   */
   async requestErasure(referenceNumber: string, email: string) {
     const { guest, booking } = await this.resolveGuestFromBooking(referenceNumber, email);
 
@@ -124,6 +155,150 @@ export class PopiaService {
         'Cannot process erasure request while active bookings exist. Please cancel all bookings first.',
       );
     }
+
+    // Supersede any earlier still-pending request for this guest.
+    await this.erasureRepo.update(
+      { guest_id: guest.id, status: ErasureRequestStatus.PENDING },
+      { status: ErasureRequestStatus.CANCELLED, cancelled_at: new Date() },
+    );
+
+    const rawToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const request = this.erasureRepo.create({
+      guest_id: guest.id,
+      property_id: booking.property_id,
+      token_hash: this.hashToken(rawToken),
+      status: ErasureRequestStatus.PENDING,
+      expires_at: expiresAt,
+    });
+    await this.erasureRepo.save(request);
+
+    const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const confirmUrl = safeUrl(
+      `${frontendUrl.replace(/\/+$/, '')}/popia/erasure/confirm?token=${rawToken}`,
+    );
+
+    if (guest.email) {
+      const { subject, html } = erasureConfirmationEmail({
+        guestName: `${guest.first_name || ''} ${guest.last_name || ''}`.trim() || 'Guest',
+        propertyName: booking.property?.name || 'the property',
+        referenceNumber,
+        confirmUrl,
+        graceDays: this.graceDays,
+      });
+      await this.emailProvider.send({ to: guest.email, subject, html });
+    }
+
+    this.logger.log(`Erasure confirmation requested for guest ${guest.id}`);
+    return {
+      message:
+        'We have emailed you a confirmation link. Your data will only be erased after you confirm, followed by a grace period during which you can still cancel.',
+    };
+  }
+
+  /**
+   * Step 2: the guest clicks the emailed link. Validates the token (hash match,
+   * not expired, still pending) and schedules anonymisation after the grace
+   * period rather than performing it immediately.
+   */
+  async confirmErasure(token: string) {
+    const request = await this.erasureRepo.findOne({
+      where: {
+        token_hash: this.hashToken(token),
+        status: ErasureRequestStatus.PENDING,
+      },
+    });
+    if (!request) {
+      throw new NotFoundException('Invalid or already-used confirmation link');
+    }
+    if (request.expires_at.getTime() < Date.now()) {
+      throw new BadRequestException('This confirmation link has expired. Please submit a new erasure request.');
+    }
+
+    const now = new Date();
+    request.status = ErasureRequestStatus.CONFIRMED;
+    request.confirmed_at = now;
+    request.scheduled_at = new Date(now.getTime() + this.graceDays * 24 * 60 * 60 * 1000);
+    await this.erasureRepo.save(request);
+
+    this.logger.log(
+      `Erasure confirmed for guest ${request.guest_id}; scheduled for ${request.scheduled_at.toISOString()}`,
+    );
+    return {
+      message: `Your erasure request is confirmed. Your data will be anonymised on ${request.scheduled_at
+        .toISOString()
+        .slice(0, 10)}. You may cancel any time before then.`,
+      scheduledAt: request.scheduled_at,
+    };
+  }
+
+  /**
+   * Step 2b: cancel a confirmed-but-not-yet-executed request. Verifies the
+   * requester owns the booking before cancelling.
+   */
+  async cancelErasure(referenceNumber: string, email: string) {
+    const { guest } = await this.resolveGuestFromBooking(referenceNumber, email);
+
+    const result = await this.erasureRepo.update(
+      {
+        guest_id: guest.id,
+        status: ErasureRequestStatus.CONFIRMED,
+      },
+      { status: ErasureRequestStatus.CANCELLED, cancelled_at: new Date() },
+    );
+
+    if (!result.affected) {
+      throw new NotFoundException('No pending erasure request found to cancel');
+    }
+
+    this.logger.log(`Erasure cancelled for guest ${guest.id}`);
+    return { message: 'Your erasure request has been cancelled. Your data will be retained.' };
+  }
+
+  /**
+   * Step 3: scheduled sweep that anonymises guests whose grace period has
+   * elapsed. Runs hourly via the app's ScheduleModule.
+   *
+   * NOTE: like the other @Cron jobs in this codebase, this is not yet
+   * multi-instance-safe (audit P1 — scheduled jobs). With >1 API instance it
+   * could run on each; the per-row status guard keeps it idempotent, but a
+   * distributed lock / queue should be added platform-wide.
+   */
+  @Cron('0 15 * * * *')
+  async processScheduledErasures() {
+    const due = await this.erasureRepo.find({
+      where: {
+        status: ErasureRequestStatus.CONFIRMED,
+        scheduled_at: LessThanOrEqual(new Date()),
+      },
+    });
+
+    for (const request of due) {
+      try {
+        await this.performErasure(request.guest_id);
+        request.status = ErasureRequestStatus.COMPLETED;
+        request.completed_at = new Date();
+        await this.erasureRepo.save(request);
+      } catch (err: any) {
+        this.logger.error(
+          `Failed to anonymise guest ${request.guest_id}: ${err?.message ?? err}`,
+        );
+      }
+    }
+    if (due.length) {
+      this.logger.log(`Processed ${due.length} scheduled erasure request(s)`);
+    }
+    return { processed: due.length };
+  }
+
+  /**
+   * Irreversibly anonymise a guest's personal data. Internal — only reached via
+   * a confirmed request whose grace period has elapsed.
+   */
+  private async performErasure(guestId: string) {
+    const guest = await this.guestsRepo.findOne({ where: { id: guestId } });
+    if (!guest) return;
 
     guest.first_name = 'Anonymised';
     guest.last_name = 'Guest';
@@ -140,7 +315,6 @@ export class PopiaService {
     );
 
     this.logger.log(`Erasure completed for guest ${guest.id}`);
-    return { message: 'Your personal data has been anonymised in compliance with POPIA.' };
   }
 
   async getGuestConsents(guestId: string) {
@@ -239,7 +413,7 @@ export class PopiaService {
   private async resolveGuestFromBooking(referenceNumber: string, email: string) {
     const booking = await this.bookingsRepo.findOne({
       where: { reference_number: referenceNumber },
-      relations: ['guest'],
+      relations: ['guest', 'property'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
     if (booking.guest?.email?.toLowerCase() !== email.toLowerCase()) {

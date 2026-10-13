@@ -56,6 +56,7 @@ export default function PortfolioPage() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [bulkMsg, setBulkMsg] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -63,7 +64,7 @@ export default function PortfolioPage() {
       try {
         const res = await api.get<PortfolioData>('/properties/portfolio/overview');
         setData(res as PortfolioData);
-      } catch { /* ignore */ }
+      } catch (err: any) { setFetchError(err.message || 'Failed to load portfolio data'); }
       setLoading(false);
     })();
   }, []);
@@ -75,7 +76,7 @@ export default function PortfolioPage() {
       const r = res as any;
       setAllRules(r?.rules || []);
       setRulesProperties(r?.properties || []);
-    } catch { /* ignore */ }
+    } catch (err: any) { setFetchError(err.message || 'Failed to load pricing rules'); }
     setLoadingRules(false);
   };
 
@@ -149,6 +150,8 @@ export default function PortfolioPage() {
           </p>
         </div>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-lg w-fit">

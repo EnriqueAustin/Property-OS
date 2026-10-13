@@ -1,5 +1,9 @@
 name: CI
 
+# Lives at the repository root (PropertyOS/.github) so GitHub actually runs it.
+# The app is in the property-os/ subdirectory, so each step sets its
+# working-directory accordingly.
+
 on:
   push:
     branches: [main, develop]
@@ -48,9 +52,15 @@ jobs:
         working-directory: property-os
         run: npm ci
 
+      # Non-blocking until the existing lint debt (~4k prettier/no-unsafe-* issues) is cleared.
       - name: Lint API
+        continue-on-error: true
         working-directory: property-os/apps/api
-        run: npx eslint "src/**/*.ts" --max-warnings 0 || true
+        run: npx eslint "src/**/*.ts" --max-warnings 0
+
+      - name: Typecheck API
+        working-directory: property-os/apps/api
+        run: npx tsc --noEmit -p tsconfig.build.json
 
       - name: Run unit tests
         working-directory: property-os/apps/api
@@ -75,7 +85,7 @@ jobs:
         working-directory: property-os/apps/web
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3001
-        run: npx next build || true
+        run: npx next build
 
       - name: Upload coverage
         if: always()

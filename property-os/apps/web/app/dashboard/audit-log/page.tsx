@@ -39,6 +39,7 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
   const [entityFilter, setEntityFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   const load = async (page = 1) => {
     if (!property) return;
@@ -54,7 +55,7 @@ export default function AuditLogPage() {
       const r = res as any;
       setEntries(r?.data || r || []);
       setMeta(r?.meta || { page: 1, totalPages: 1, total: 0 });
-    } catch { /* ignore */ }
+    } catch (err: any) { setFetchError(err.message || 'Failed to load audit log'); }
     setLoading(false);
   };
 
@@ -73,6 +74,8 @@ export default function AuditLogPage() {
         <h2 className="text-2xl font-bold">Audit Log</h2>
         <p className="text-sm text-muted mt-1">Track all actions and changes made to this property.</p>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">

@@ -52,31 +52,31 @@ export class ChannelsController {
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_VIEW)
   getOne(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
   ) {
-    return this.channels.getChannel(channelId);
+    return this.channels.getChannel(channelId, propertyId);
   }
 
   @Patch('properties/:propertyId/channels/:channelId')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_MANAGE)
   update(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
     @Body() dto: UpdateChannelDto,
   ) {
-    return this.channels.updateChannel(channelId, dto);
+    return this.channels.updateChannel(channelId, propertyId, dto);
   }
 
   @Delete('properties/:propertyId/channels/:channelId')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_MANAGE)
   remove(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
   ) {
-    return this.channels.deleteChannel(channelId);
+    return this.channels.deleteChannel(channelId, propertyId);
   }
 
   // --- Mapping endpoints ----------------------------------------------------
@@ -85,34 +85,34 @@ export class ChannelsController {
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_MANAGE)
   addMapping(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
     @Body() dto: CreateChannelMappingDto,
   ) {
-    return this.channels.addMapping(channelId, dto);
+    return this.channels.addMapping(channelId, propertyId, dto);
   }
 
   @Patch('properties/:propertyId/channels/:channelId/mappings/:mappingId')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_MANAGE)
   updateMapping(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
-    @Param('channelId', new ParseUUIDPipe()) _channelId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
+    @Param('channelId', new ParseUUIDPipe()) channelId: string,
     @Param('mappingId', new ParseUUIDPipe()) mappingId: string,
     @Body() dto: UpdateChannelMappingDto,
   ) {
-    return this.channels.updateMapping(mappingId, dto);
+    return this.channels.updateMapping(mappingId, channelId, propertyId, dto);
   }
 
   @Delete('properties/:propertyId/channels/:channelId/mappings/:mappingId')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_MANAGE)
   removeMapping(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
-    @Param('channelId', new ParseUUIDPipe()) _channelId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
+    @Param('channelId', new ParseUUIDPipe()) channelId: string,
     @Param('mappingId', new ParseUUIDPipe()) mappingId: string,
   ) {
-    return this.channels.removeMapping(mappingId);
+    return this.channels.removeMapping(mappingId, channelId, propertyId);
   }
 
   // --- Sync endpoints -------------------------------------------------------
@@ -121,31 +121,35 @@ export class ChannelsController {
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_MANAGE)
   triggerSync(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
   ) {
-    return this.channels.syncICalImport(channelId);
+    return this.channels.syncICalImport(channelId, propertyId);
   }
 
   @Get('properties/:propertyId/channels/:channelId/test')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_VIEW)
   testConnection(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
   ) {
-    return this.channels.testConnection(channelId);
+    return this.channels.testConnection(channelId, propertyId);
   }
 
   @Get('properties/:propertyId/channels/:channelId/logs')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.CHANNELS_VIEW)
   getSyncLogs(
-    @Param('propertyId', new ParseUUIDPipe()) _propertyId: string,
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('channelId', new ParseUUIDPipe()) channelId: string,
     @Query('limit') limit?: string,
   ) {
-    return this.channels.getSyncLogs(channelId, limit ? parseInt(limit) : 20);
+    return this.channels.getSyncLogs(
+      channelId,
+      propertyId,
+      limit ? parseInt(limit) : 20,
+    );
   }
 
   // --- Revenue by channel report -------------------------------------------

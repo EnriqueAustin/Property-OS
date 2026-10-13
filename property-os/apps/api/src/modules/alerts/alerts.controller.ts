@@ -40,10 +40,11 @@ export class AlertsController {
   @Patch(':alertId')
   @RequirePermission(Permission.NOTIFICATIONS_MANAGE)
   update(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('alertId', new ParseUUIDPipe()) alertId: string,
     @Body() dto: UpdateAlertDto,
   ) {
-    return this.alerts.updateAlert(alertId, dto.status);
+    return this.alerts.updateAlert(alertId, propertyId, dto.status);
   }
 
   @Post('scan')

@@ -244,6 +244,13 @@ export default function PaymentPage() {
                     Secure payment via PayFast
                   </p>
                   <button
+                    onClick={() => payNow('snapscan')}
+                    disabled={paying}
+                    className="w-full mt-3 py-2.5 text-sm font-medium text-white bg-[#E8503A] rounded-lg hover:bg-[#D04530] disabled:opacity-50"
+                  >
+                    Pay with SnapScan
+                  </button>
+                  <button
                     onClick={() => payNow('eft')}
                     disabled={paying}
                     className="w-full mt-3 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"

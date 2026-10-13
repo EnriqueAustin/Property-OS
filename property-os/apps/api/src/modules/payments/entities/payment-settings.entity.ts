@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Property } from '../../properties/entities/property.entity';
+import { EncryptedColumnTransformer } from '../utils/encrypted-column.transformer';
 
 @Entity('payment_settings')
 export class PaymentSettings {
@@ -20,10 +21,20 @@ export class PaymentSettings {
   @Column({ type: 'varchar', length: 100, nullable: true })
   payfast_merchant_id: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
+  // Encrypted at rest (AES-256-GCM); ciphertext is longer than the plaintext,
+  // so stored as text. Transformer transparently encrypts/decrypts.
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: EncryptedColumnTransformer,
+  })
   payfast_merchant_key: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
+  @Column({
+    type: 'text',
+    nullable: true,
+    transformer: EncryptedColumnTransformer,
+  })
   payfast_passphrase: string;
 
   @Column({ type: 'boolean', default: true })

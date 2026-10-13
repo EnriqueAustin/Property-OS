@@ -52,6 +52,14 @@ export class HousekeepingController {
     return this.hkService.getStats(propertyId, date);
   }
 
+  @Get('performance')
+  @RequirePermission(Permission.HOUSEKEEPING_VIEW)
+  performance(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.hkService.getPerformanceMetrics(propertyId);
+  }
+
   @Get('maintenance-summary')
   @RequirePermission(Permission.HOUSEKEEPING_VIEW)
   maintenanceSummary(
@@ -63,15 +71,19 @@ export class HousekeepingController {
   @Patch(':taskId')
   @RequirePermission(Permission.HOUSEKEEPING_MANAGE)
   update(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Body() dto: UpdateHousekeepingTaskDto,
   ) {
-    return this.hkService.update(taskId, dto);
+    return this.hkService.update(taskId, propertyId, dto);
   }
 
   @Delete(':taskId')
   @RequirePermission(Permission.HOUSEKEEPING_MANAGE)
-  remove(@Param('taskId', ParseUUIDPipe) taskId: string) {
-    return this.hkService.remove(taskId);
+  remove(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ) {
+    return this.hkService.remove(taskId, propertyId);
   }
 }

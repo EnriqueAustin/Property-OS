@@ -68,6 +68,7 @@ export default function FinancialPage() {
   const [refundReport, setRefundReport] = useState<RefundReport | null>(null);
   const [outstanding, setOutstanding] = useState<OutstandingReport | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
     if (!property) return;
@@ -87,7 +88,7 @@ export default function FinancialPage() {
         setOutstanding(out);
         setMethods(Array.isArray(meth) ? meth : []);
       })
-      .catch(() => {})
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load financial data'); })
       .finally(() => setLoading(false));
   }, [property, startDate, endDate]);
 
@@ -106,6 +107,8 @@ export default function FinancialPage() {
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
         </div>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {loading ? (
         <div className="p-12 text-center text-muted">Loading financial data...</div>

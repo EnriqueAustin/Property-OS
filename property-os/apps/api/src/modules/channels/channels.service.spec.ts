@@ -133,14 +133,14 @@ describe('ChannelsService', () => {
     it('should return a channel by id', async () => {
       mockChannelsRepo.findOne.mockResolvedValue(mockChannel);
 
-      const result = await service.getChannel('ch-1');
+      const result = await service.getChannel('ch-1', 'prop-1');
       expect(result.name).toBe('Airbnb Listing');
     });
 
     it('should throw NotFoundException for unknown channel', async () => {
       mockChannelsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.getChannel('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.getChannel('unknown', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -149,7 +149,7 @@ describe('ChannelsService', () => {
       mockChannelsRepo.findOne.mockResolvedValue({ ...mockChannel });
       mockChannelsRepo.save.mockImplementation((ch) => Promise.resolve(ch));
 
-      const result = await service.updateChannel('ch-1', {
+      const result = await service.updateChannel('ch-1', 'prop-1', {
         name: 'Updated Airbnb',
         commissionPercent: 12,
       });
@@ -163,7 +163,7 @@ describe('ChannelsService', () => {
     it('should remove the channel', async () => {
       mockChannelsRepo.findOne.mockResolvedValue(mockChannel);
 
-      await service.deleteChannel('ch-1');
+      await service.deleteChannel('ch-1', 'prop-1');
 
       expect(mockChannelsRepo.remove).toHaveBeenCalledWith(mockChannel);
     });
@@ -172,9 +172,10 @@ describe('ChannelsService', () => {
   describe('addMapping', () => {
     it('should create a mapping', async () => {
       mockChannelsRepo.findOne.mockResolvedValue(mockChannel);
+      mockRoomTypesRepo.findOne.mockResolvedValue({ id: 'rt-1', property_id: 'prop-1' });
       mockMappingsRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.addMapping('ch-1', {
+      const result = await service.addMapping('ch-1', 'prop-1', {
         roomTypeId: 'rt-1',
         syncAvailability: true,
         syncRates: true,
@@ -186,35 +187,37 @@ describe('ChannelsService', () => {
 
     it('should throw ConflictException for duplicate mapping', async () => {
       mockChannelsRepo.findOne.mockResolvedValue(mockChannel);
+      mockRoomTypesRepo.findOne.mockResolvedValue({ id: 'rt-1', property_id: 'prop-1' });
       mockMappingsRepo.findOne.mockResolvedValue({ id: 'existing' });
 
       await expect(
-        service.addMapping('ch-1', { roomTypeId: 'rt-1' }),
+        service.addMapping('ch-1', 'prop-1', { roomTypeId: 'rt-1' }),
       ).rejects.toThrow(ConflictException);
     });
   });
 
   describe('removeMapping', () => {
     it('should remove a mapping', async () => {
-      const mapping = { id: 'map-1' };
+      const mapping = { id: 'map-1', channel: { property_id: 'prop-1' } };
       mockMappingsRepo.findOne.mockResolvedValue(mapping);
 
-      await service.removeMapping('map-1');
+      await service.removeMapping('map-1', 'ch-1', 'prop-1');
       expect(mockMappingsRepo.remove).toHaveBeenCalledWith(mapping);
     });
 
     it('should throw NotFoundException for unknown mapping', async () => {
       mockMappingsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.removeMapping('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.removeMapping('unknown', 'ch-1', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('getSyncLogs', () => {
     it('should return sync logs', async () => {
+      mockChannelsRepo.findOne.mockResolvedValue(mockChannel);
       mockSyncLogsRepo.find.mockResolvedValue([{ id: 'sync-1', status: 'success' }]);
 
-      const result = await service.getSyncLogs('ch-1', 20);
+      const result = await service.getSyncLogs('ch-1', 'prop-1', 20);
 
       expect(result).toHaveLength(1);
       expect(mockSyncLogsRepo.find).toHaveBeenCalledWith(
@@ -227,7 +230,7 @@ describe('ChannelsService', () => {
     it('should throw NotFoundException for unknown channel', async () => {
       mockChannelsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.syncICalImport('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.syncICalImport('unknown', 'prop-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException when no import URL', async () => {
@@ -236,7 +239,7 @@ describe('ChannelsService', () => {
         ical_import_url: null,
       });
 
-      await expect(service.syncICalImport('ch-1')).rejects.toThrow(BadRequestException);
+      await expect(service.syncICalImport('ch-1', 'prop-1')).rejects.toThrow(BadRequestException);
     });
   });
 

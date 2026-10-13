@@ -76,6 +76,10 @@ function BookingsPageInner() {
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [invoiceResult, setInvoiceResult] = useState<{ invoiceNumber: string } | null>(null);
   const [invoiceEmailSent, setInvoiceEmailSent] = useState(false);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [checkInForm, setCheckInForm] = useState({ idNumber: '', idType: 'sa_id', notes: '' });
+  const [showCheckOutConfirm, setShowCheckOutConfirm] = useState(false);
+  const [checkOutBalance, setCheckOutBalance] = useState(0);
 
   const fetchBookings = () => {
     if (!property) return;
@@ -91,7 +95,9 @@ function BookingsPageInner() {
         setBookings(res.data || []);
         setMeta(res.meta || { page: 1, totalPages: 1, total: 0 });
       })
-      .catch(() => {})
+      .catch((err: any) => {
+        setActionError(err.message || 'Failed to load bookings');
+      })
       .finally(() => setLoading(false));
   };
 
@@ -113,6 +119,12 @@ function BookingsPageInner() {
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!property) return;
+
+    if (!form.roomId) { setCreateError('Please select a room'); return; }
+    if (!form.checkIn || !form.checkOut) { setCreateError('Check-in and check-out dates are required'); return; }
+    if (form.checkOut <= form.checkIn) { setCreateError('Check-out must be after check-in'); return; }
+    if (!form.guest.firstName.trim() || !form.guest.lastName.trim()) { setCreateError('Guest first and last name are required'); return; }
+
     setCreating(true);
     setCreateError('');
     try {
@@ -185,6 +197,8 @@ function BookingsPageInner() {
 
   const recordPayment = async () => {
     if (!property || !selected) return;
+    if (paymentForm.amount <= 0) { setActionError('Amount must be greater than zero'); return; }
+    if (paymentForm.amount > Number(selected.total_price) * 2) { setActionError('Amount seems too high — please double-check'); return; }
     setRecordingPayment(true);
     setActionError('');
     try {
@@ -244,6 +258,7 @@ function BookingsPageInner() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {actionError && !showPanel && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{actionError}</div>}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Bookings</h2>
         <button
@@ -606,13 +621,28 @@ function BookingsPageInner() {
                   </button>
                 )}
                 {selected.status === 'confirmed' && (
-                  <button onClick={() => updateStatus(selected.id, 'checked_in')} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
+                  <button onClick={() => { setCheckInForm({ idNumber: '', idType: 'sa_id', notes: '' }); setShowCheckInModal(true); }} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
                     Check In
                   </button>
                 )}
                 {selected.status === 'checked_in' && (
-                  <button onClick={() => updateStatus(selected.id, 'checked_out')} className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90">
+                  <button onClick={async () => {
+                    if (!property || !selected) return;
+                    try {
+                      const payments = await api.get<any[]>(`/properties/${property.id}/payments?bookingId=${selected.id}`);
+                      const paid = (Array.isArray(payments) ? payments : (payments as any)?.data || [])
+                        .filter((p: any) => p.status === 'completed' && p.payment_type !== 'refund')
+                        .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+                      setCheckOutBalance(Number(selected.total_price) - paid);
+                    } catch { setCheckOutBalance(0); }
+                    setShowCheckOutConfirm(true);
+                  }} className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90">
                     Check Out
+                  </button>
+                )}
+                {selected.status === 'confirmed' && (
+                  <button onClick={() => updateStatus(selected.id, 'no_show')} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200">
+                    No-Show
                   </button>
                 )}
                 {['pending', 'confirmed'].includes(selected.status) && (
@@ -654,7 +684,7 @@ function BookingsPageInner() {
                     <button
                       onClick={() => {
                         if (!property || !selected) return;
-                        window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/properties/${property.id}/bookings/${selected.id}/invoice`, '_blank');
+                        window.open(`/dashboard/invoices/${invoiceResult.invoiceNumber}?propertyId=${property.id}&bookingId=${selected.id}`, '_blank');
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-border rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50"
                     >
@@ -732,6 +762,7 @@ function BookingsPageInner() {
                   type="number"
                   step="0.01"
                   min="0.01"
+                  max={Number(selected.total_price)}
                   value={paymentForm.amount || ''}
                   onChange={(e) => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) })}
                   className={inputClass}
@@ -779,6 +810,141 @@ function BookingsPageInner() {
               >
                 <CreditCard size={14} />
                 {recordingPayment ? 'Recording...' : 'Record Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Check-In Modal with ID Verification */}
+      {showCheckInModal && selected && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowCheckInModal(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-xl shadow-xl border border-border p-5">
+            <h3 className="font-semibold text-lg mb-1">Check In Guest</h3>
+            <p className="text-sm text-muted mb-4">
+              {selected.guest?.first_name} {selected.guest?.last_name} — {selected.room?.name || 'No room'}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">ID Type</label>
+                <select
+                  value={checkInForm.idType}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, idType: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="sa_id">SA ID Number</option>
+                  <option value="passport">Passport</option>
+                  <option value="drivers_license">Driver&apos;s License</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  {checkInForm.idType === 'sa_id' ? 'SA ID Number' : checkInForm.idType === 'passport' ? 'Passport Number' : 'License Number'}
+                  <span className="text-danger ml-0.5">*</span>
+                </label>
+                <input
+                  value={checkInForm.idNumber}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, idNumber: e.target.value })}
+                  className={inputClass}
+                  placeholder={checkInForm.idType === 'sa_id' ? '8501015009088' : 'Enter document number'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                <textarea
+                  value={checkInForm.notes}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, notes: e.target.value })}
+                  rows={2}
+                  className={`${inputClass} resize-none`}
+                  placeholder="e.g. Guest arrived late, luggage stored"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted mt-3">SA guest register law requires recording guest identification.</p>
+            {actionError && <div className="mt-3 p-3 rounded-lg bg-danger/10 text-danger text-sm">{actionError}</div>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowCheckInModal(false)}
+                className="px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!checkInForm.idNumber.trim()) { setActionError('ID number is required for check-in'); return; }
+                  setActionError('');
+                  try {
+                    await api.patch(`/properties/${property!.id}/bookings/${selected.id}/status`, {
+                      status: 'checked_in',
+                      idType: checkInForm.idType,
+                      idNumber: checkInForm.idNumber,
+                      checkInNotes: checkInForm.notes || undefined,
+                    });
+                    fetchBookings();
+                    const b = await api.get<BookingDetail>(`/properties/${property!.id}/bookings/${selected.id}`);
+                    setSelected(b);
+                    setShowCheckInModal(false);
+                  } catch (err: any) {
+                    setActionError(err.message || 'Failed to check in guest');
+                  }
+                }}
+                disabled={!checkInForm.idNumber.trim()}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50"
+              >
+                Complete Check-In
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Check-Out Confirmation with Folio Review */}
+      {showCheckOutConfirm && selected && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowCheckOutConfirm(false)} />
+          <div className="relative w-full max-w-sm bg-white rounded-xl shadow-xl border border-border p-5">
+            <h3 className="font-semibold text-lg mb-1">Confirm Check-Out</h3>
+            <p className="text-sm text-muted mb-4">
+              {selected.guest?.first_name} {selected.guest?.last_name} — {selected.room?.name || 'No room'}
+            </p>
+            {checkOutBalance > 0 ? (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 mb-4">
+                <p className="text-sm font-medium text-amber-800">Outstanding Balance</p>
+                <p className="text-lg font-bold text-amber-900">{formatCurrency(checkOutBalance)}</p>
+                <p className="text-xs text-amber-600 mt-1">This guest has an unpaid balance. Record payment before checking out, or proceed anyway.</p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200 mb-4">
+                <p className="text-sm font-medium text-green-800">Fully Paid</p>
+                <p className="text-xs text-green-600 mt-1">All charges have been settled.</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowCheckOutConfirm(false)}
+                className="px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              {checkOutBalance > 0 && (
+                <button
+                  onClick={() => {
+                    setShowCheckOutConfirm(false);
+                    setPaymentForm({ ...paymentForm, amount: checkOutBalance });
+                    setShowPaymentModal(true);
+                  }}
+                  className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600"
+                >
+                  Record Payment
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  await updateStatus(selected.id, 'checked_out');
+                  setShowCheckOutConfirm(false);
+                }}
+                className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90"
+              >
+                {checkOutBalance > 0 ? 'Check Out Anyway' : 'Check Out'}
               </button>
             </div>
           </div>

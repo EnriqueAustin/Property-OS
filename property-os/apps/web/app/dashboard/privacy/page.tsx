@@ -48,6 +48,7 @@ export default function PrivacyPage() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   const loadConsents = async (page = 1) => {
     if (!property) return;
@@ -57,7 +58,7 @@ export default function PrivacyPage() {
       const r = res as any;
       setConsents(r?.data || r || []);
       setMeta(r?.meta || { page: 1, totalPages: 1, total: 0 });
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Failed to load consent records'); }
     setLoadingConsents(false);
   };
 
@@ -68,7 +69,7 @@ export default function PrivacyPage() {
       const res = await api.get<RetentionSettings>(`/properties/${property.id}/data-retention`);
       const r = res as any;
       setRetention(r?.data || r);
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Failed to load retention settings'); }
     setLoadingSettings(false);
   };
 
@@ -112,6 +113,8 @@ export default function PrivacyPage() {
           Manage guest consent records and data retention policies
         </p>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">

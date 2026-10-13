@@ -1,7 +1,7 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { sharedStyles } from '../styles.js';
-import type { AvailabilityResult, AvailableRoom } from '../api.js';
+import type { AvailabilityResult, AvailableRoom, IndividualRoom } from '../api.js';
 
 @customElement('pos-room-select')
 export class RoomSelect extends LitElement {
@@ -9,6 +9,7 @@ export class RoomSelect extends LitElement {
 
   @property({ type: Object }) availability!: AvailabilityResult;
   @property({ type: Number }) guests = 2;
+  @property({ type: String }) bookingMode: 'hotel' | 'guesthouse' = 'hotel';
 
   private emit(name: string, detail: any) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -28,8 +29,42 @@ export class RoomSelect extends LitElement {
 
         ${a.availableRooms.length === 0
           ? html`<div style="text-align:center;padding:2rem;color:var(--pos-muted);">No rooms available for the selected dates.</div>`
-          : a.availableRooms.map(room => this.renderRoom(room))
+          : this.bookingMode === 'guesthouse'
+            ? this.renderGuesthouseRooms(a)
+            : a.availableRooms.map(room => this.renderRoom(room))
         }
+      </div>
+    `;
+  }
+
+  private renderGuesthouseRooms(a: AvailabilityResult) {
+    return html`${a.availableRooms.flatMap(roomType =>
+      (roomType.rooms || []).map(individual =>
+        this.renderIndividualRoom(roomType, individual)
+      )
+    )}`;
+  }
+
+  private renderIndividualRoom(roomType: AvailableRoom, individual: IndividualRoom) {
+    return html`
+      <div class="room-card">
+        <div class="room-info">
+          <h4>${individual.name}</h4>
+          <div class="desc">${roomType.roomTypeName}</div>
+          ${individual.floor ? html`<div class="desc">Floor ${individual.floor}</div>` : nothing}
+          <div class="occupancy">Max ${roomType.maxOccupancy} guests</div>
+          ${roomType.amenities.length > 0 ? html`
+            <div class="amenities">
+              ${roomType.amenities.map(a => html`<span class="amenity">✓ ${a}</span>`)}
+            </div>
+          ` : nothing}
+        </div>
+        <div class="pricing">
+          <div class="rate">R ${roomType.nightlyRate.toLocaleString()} / night</div>
+          <div class="total-price">R ${roomType.totalPrice.toLocaleString()}</div>
+          <div class="nights-label">total for ${this.availability.nights} night${this.availability.nights > 1 ? 's' : ''}</div>
+          <button class="btn btn-primary" @click=${() => this.emit('select-room', { room: roomType, roomId: individual.id })}>Book this room</button>
+        </div>
       </div>
     `;
   }
@@ -51,7 +86,7 @@ export class RoomSelect extends LitElement {
           <div class="rate">R ${room.nightlyRate.toLocaleString()} / night</div>
           <div class="total-price">R ${room.totalPrice.toLocaleString()}</div>
           <div class="nights-label">total for ${this.availability.nights} night${this.availability.nights > 1 ? 's' : ''}</div>
-          <button class="btn btn-primary" @click=${() => this.emit('select-room', room)}>Select</button>
+          <button class="btn btn-primary" @click=${() => this.emit('select-room', { room })}>Select</button>
         </div>
       </div>
     `;

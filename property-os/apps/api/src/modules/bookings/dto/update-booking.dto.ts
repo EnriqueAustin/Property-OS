@@ -42,6 +42,18 @@ const VALID_STATUSES = [
 export class UpdateStatusDto {
   @IsIn(VALID_STATUSES as unknown as string[])
   status: BookingStatus;
+
+  @IsOptional()
+  @IsString()
+  idType?: string;
+
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  checkInNotes?: string;
 }
 
 export class CancelBookingDto {

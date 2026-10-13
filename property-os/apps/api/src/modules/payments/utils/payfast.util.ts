@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import axios from 'axios';
 
 export interface PayfastPayload {
   merchant_id: string;
@@ -17,6 +18,10 @@ export interface PayfastPayload {
 
 const PAYFAST_LIVE_URL = 'https://www.payfast.co.za/eng/process';
 const PAYFAST_SANDBOX_URL = 'https://sandbox.payfast.co.za/eng/process';
+
+const PAYFAST_LIVE_VALIDATE_URL = 'https://www.payfast.co.za/eng/query/validate';
+const PAYFAST_SANDBOX_VALIDATE_URL =
+  'https://sandbox.payfast.co.za/eng/query/validate';
 
 export function buildPayfastRedirectUrl(
   payload: PayfastPayload,
@@ -74,6 +79,38 @@ export function verifyPayfastSignature(
     .digest('hex');
 
   return expected === receivedSignature;
+}
+
+/**
+ * Server-to-server confirmation that an ITN really originated from PayFast.
+ * PayFast's docs require posting the received data back to the validate
+ * endpoint and treating the payment as genuine only when the response is
+ * "VALID". Returns false on any error or non-VALID response.
+ */
+export async function validatePayfastItn(
+  data: Record<string, string>,
+  sandbox: boolean,
+): Promise<boolean> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined && v !== null) {
+      params.append(k, String(v));
+    }
+  }
+
+  const url = sandbox ? PAYFAST_SANDBOX_VALIDATE_URL : PAYFAST_LIVE_VALIDATE_URL;
+
+  try {
+    const res = await axios.post(url, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 10000,
+    });
+    const text = typeof res.data === 'string' ? res.data : String(res.data);
+    const firstLine = text.trim().split(/\r?\n/)[0].trim().toUpperCase();
+    return firstLine === 'VALID';
+  } catch {
+    return false;
+  }
 }
 
 export function isValidPayfastHost(ip: string): boolean {

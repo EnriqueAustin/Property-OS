@@ -45,6 +45,7 @@ export default function RateParityPage() {
   const { property } = useAuth();
   const [data, setData] = useState<RoomTypeParity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
 
   const fetchParity = async () => {
     if (!property) return;
@@ -54,7 +55,7 @@ export default function RateParityPage() {
         `/properties/${property.id}/channels/reports/rate-parity`,
       );
       setData(Array.isArray(res) ? res : (res as any).data || []);
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Failed to load rate parity data'); }
     setLoading(false);
   };
 
@@ -79,6 +80,7 @@ export default function RateParityPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary">Rate Parity</h1>

@@ -170,12 +170,13 @@ describe('FrontdeskService', () => {
 
   describe('getBookingFolio', () => {
     it('should calculate charges, credits and balance', async () => {
+      bookingsRepo.findOne.mockResolvedValue(mockBooking());
       folioRepo.find.mockResolvedValue([
         mockFolioItem({ amount: 1000, quantity: 2, total: 2000, is_credit: false }),
         mockFolioItem({ id: 'item-2', category: FolioCategory.PAYMENT, total: 500, is_credit: true }),
       ]);
 
-      const result = await service.getBookingFolio('booking-1');
+      const result = await service.getBookingFolio('booking-1', 'prop-1');
 
       expect(result.summary.totalCharges).toBe(2000);
       expect(result.summary.totalCredits).toBe(500);
@@ -183,9 +184,10 @@ describe('FrontdeskService', () => {
     });
 
     it('should return zero summary when no folio items', async () => {
+      bookingsRepo.findOne.mockResolvedValue(mockBooking());
       folioRepo.find.mockResolvedValue([]);
 
-      const result = await service.getBookingFolio('booking-1');
+      const result = await service.getBookingFolio('booking-1', 'prop-1');
 
       expect(result.items).toHaveLength(0);
       expect(result.summary.balance).toBe(0);
@@ -334,7 +336,7 @@ describe('FrontdeskService', () => {
       folioRepo.findOne.mockResolvedValue(existing);
       folioRepo.remove.mockResolvedValue(undefined);
 
-      await service.deleteFolioItem('item-1');
+      await service.deleteFolioItem('item-1', 'prop-1');
 
       expect(folioRepo.remove).toHaveBeenCalledWith(existing);
     });
@@ -342,7 +344,7 @@ describe('FrontdeskService', () => {
     it('should throw NotFoundException when item not found', async () => {
       folioRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.deleteFolioItem('nope')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteFolioItem('nope', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 

@@ -30,6 +30,10 @@ export class PublicBookingDto {
   roomTypeId?: string;
 
   @IsOptional()
+  @IsUUID()
+  roomId?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => RoomSelectionDto)

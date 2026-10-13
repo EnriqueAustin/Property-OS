@@ -135,7 +135,7 @@ describe('AlertsService', () => {
       alertsRepo.findOne.mockResolvedValue({ id: 'alert-1', status: AlertStatus.ACTIVE });
       alertsRepo.save.mockImplementation((data) => Promise.resolve(data));
 
-      const result = await service.updateAlert('alert-1', AlertStatus.ACKNOWLEDGED);
+      const result = await service.updateAlert('alert-1', 'prop-1', AlertStatus.ACKNOWLEDGED);
 
       expect(alertsRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -149,7 +149,7 @@ describe('AlertsService', () => {
       alertsRepo.findOne.mockResolvedValue({ id: 'alert-1', status: AlertStatus.ACTIVE });
       alertsRepo.save.mockImplementation((data) => Promise.resolve(data));
 
-      await service.updateAlert('alert-1', AlertStatus.DISMISSED);
+      await service.updateAlert('alert-1', 'prop-1', AlertStatus.DISMISSED);
 
       expect(alertsRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ status: AlertStatus.DISMISSED }),
@@ -159,7 +159,7 @@ describe('AlertsService', () => {
     it('should throw NotFoundException when alert not found', async () => {
       alertsRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.updateAlert('nope', AlertStatus.DISMISSED)).rejects.toThrow(NotFoundException);
+      await expect(service.updateAlert('nope', 'prop-1', AlertStatus.DISMISSED)).rejects.toThrow(NotFoundException);
     });
   });
 

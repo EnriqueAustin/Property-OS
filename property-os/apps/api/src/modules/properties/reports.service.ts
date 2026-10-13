@@ -245,8 +245,22 @@ export class ReportsService {
     );
 
     const r = revenue[0];
-    const grossRevenue = parseFloat(r.gross_revenue);
+    let grossRevenue = parseFloat(r.gross_revenue);
     const totalRefunds = parseFloat(r.total_refunds);
+
+    // If no payment records, fall back to booking values
+    if (grossRevenue === 0) {
+      const bookingFallback = await this.dataSource.query(
+        `SELECT COALESCE(SUM(total_price), 0) AS booking_revenue
+         FROM bookings
+         WHERE property_id = $1
+           AND status NOT IN ('cancelled', 'no_show')
+           AND check_in BETWEEN $2 AND $3`,
+        [propertyId, startDate, endDate],
+      );
+      grossRevenue = parseFloat(bookingFallback[0]?.booking_revenue || '0');
+    }
+
     const netRevenue = grossRevenue - totalRefunds;
     const vatRate = 15;
     const vatAmount = Math.round(netRevenue * (vatRate / (100 + vatRate)) * 100) / 100;
@@ -474,21 +488,29 @@ export class ReportsService {
         WHERE property_id = $1 AND status = 'completed' AND payment_type != 'refund'
           AND paid_at BETWEEN $2 AND ($3::date + INTERVAL '1 day')
       ),
+      booking_revenue AS (
+        SELECT COALESCE(SUM(total_price), 0) AS total_booking_value
+        FROM bookings
+        WHERE property_id = $1 AND status NOT IN ('cancelled', 'no_show')
+          AND check_in BETWEEN $2 AND $3
+      ),
       booking_stats AS (
         SELECT COUNT(*) AS total_bookings
         FROM bookings
         WHERE property_id = $1 AND status NOT IN ('cancelled')
           AND booked_at BETWEEN $2 AND ($3::date + INTERVAL '1 day')
       )
-      SELECT rn.total_nights, rn.nights_sold, rev.total_revenue, bs.total_bookings
-      FROM room_nights rn, revenue rev, booking_stats bs`,
+      SELECT rn.total_nights, rn.nights_sold, rev.total_revenue, br.total_booking_value, bs.total_bookings
+      FROM room_nights rn, revenue rev, booking_revenue br, booking_stats bs`,
       [propertyId, startDate, endDate],
     );
 
     const r = stats[0];
     const totalNights = parseInt(r.total_nights || '0', 10);
     const nightsSold = parseInt(r.nights_sold || '0', 10);
-    const totalRevenue = parseFloat(r.total_revenue || '0');
+    const paymentRevenue = parseFloat(r.total_revenue || '0');
+    const bookingRevenue = parseFloat(r.total_booking_value || '0');
+    const totalRevenue = paymentRevenue || bookingRevenue;
     const totalBookings = parseInt(r.total_bookings || '0', 10);
 
     const occupancyRate = totalNights > 0 ? Math.round((nightsSold / totalNights) * 1000) / 10 : 0;

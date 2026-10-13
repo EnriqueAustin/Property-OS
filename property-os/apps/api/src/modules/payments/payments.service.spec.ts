@@ -11,6 +11,30 @@ import { Property } from '../properties/entities/property.entity';
 import { PAYMENT_EVENTS } from './events/payment.events';
 import { verifyPayfastSignature, buildPayfastRedirectUrl } from './utils/payfast.util';
 
+// Keep the real signature / URL helpers, but stub the server-to-server
+// validation call so tests don't hit the network.
+jest.mock('./utils/payfast.util', () => {
+  const actual = jest.requireActual('./utils/payfast.util');
+  return { ...actual, validatePayfastItn: jest.fn() };
+});
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { validatePayfastItn } = require('./utils/payfast.util');
+const mockValidateItn = validatePayfastItn as jest.Mock;
+
+const crypto = require('crypto');
+
+function signItn(body: Record<string, string>, passphrase: string): string {
+  const paramString = Object.entries(body)
+    .filter(([k, v]) => k !== 'signature' && v !== undefined && v !== null && v !== '')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v).trim())}`)
+    .join('&');
+  return crypto
+    .createHash('md5')
+    .update(`${paramString}&passphrase=${encodeURIComponent(passphrase)}`)
+    .digest('hex');
+}
+
 const mockBooking = {
   id: 'booking-1',
   property_id: 'prop-1',
@@ -43,12 +67,15 @@ const mockRepo = () => ({
   save: jest.fn((data) => ({ id: 'pay-1', ...data })),
   createQueryBuilder: jest.fn(() => ({
     leftJoinAndSelect: jest.fn().mockReturnThis(),
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    execute: jest.fn().mockResolvedValue({ affected: 1 }),
   })),
 });
 
@@ -128,82 +155,157 @@ describe('PaymentsService', () => {
   });
 
   describe('handlePayfastItn', () => {
-    it('should mark payment as completed on COMPLETE status', async () => {
-      const payment = {
-        id: 'pay-1',
-        property_id: 'prop-1',
-        booking_id: 'booking-1',
-        amount: 2000,
-        status: PaymentStatus.PENDING,
-        provider_data: {},
-      };
-      paymentsRepo.findOne.mockResolvedValue(payment);
-      settingsRepo.findOne.mockResolvedValue(mockSettings);
+    const basePayment = () => ({
+      id: 'pay-1',
+      property_id: 'prop-1',
+      booking_id: 'booking-1',
+      amount: 2000,
+      status: PaymentStatus.PENDING,
+      provider_data: {},
+    });
 
-      const { signature } = buildPayfastRedirectUrl(
-        {
-          merchant_id: 'merchant-1',
-          merchant_key: 'key-1',
-          return_url: '',
-          cancel_url: '',
-          notify_url: '',
-          name_first: 'John',
-          name_last: 'Doe',
-          email_address: 'john@example.com',
-          m_payment_id: 'pay-1',
-          amount: '2000.00',
-          item_name: 'Test',
-        },
-        'test-pass',
-        true,
-      );
-
-      const itnBody: Record<string, string> = {
+    const completeItn = () => {
+      const body: Record<string, string> = {
         m_payment_id: 'pay-1',
         payment_status: 'COMPLETE',
         pf_payment_id: 'pf-123',
         merchant_id: 'merchant-1',
         amount_gross: '2000.00',
       };
+      body.signature = signItn(body, 'test-pass');
+      return body;
+    };
 
-      const paramString = Object.entries(itnBody)
-        .filter(([, v]) => v)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-        .join('&');
-      const crypto = require('crypto');
-      itnBody.signature = crypto.createHash('md5')
-        .update(`${paramString}&passphrase=${encodeURIComponent('test-pass')}`)
-        .digest('hex');
+    it('should atomically complete the payment and emit on a valid COMPLETE ITN', async () => {
+      paymentsRepo.findOne.mockResolvedValue(basePayment());
+      settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(true);
 
-      await service.handlePayfastItn(itnBody, '127.0.0.1');
+      const qb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      paymentsRepo.createQueryBuilder.mockReturnValue(qb as any);
 
-      expect(paymentsRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ status: PaymentStatus.COMPLETED }),
-      );
+      await service.handlePayfastItn(completeItn(), '127.0.0.1');
+
+      expect(qb.execute).toHaveBeenCalled();
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         PAYMENT_EVENTS.COMPLETED,
         expect.anything(),
       );
     });
 
-    it('should mark payment as failed on invalid signature', async () => {
-      const payment = {
-        id: 'pay-1',
-        property_id: 'prop-1',
-        status: PaymentStatus.PENDING,
-        provider_data: {},
-      };
-      paymentsRepo.findOne.mockResolvedValue(payment);
+    it('should reject a bad signature without mutating the payment', async () => {
+      paymentsRepo.findOne.mockResolvedValue(basePayment());
       settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(true);
 
       await service.handlePayfastItn(
-        { m_payment_id: 'pay-1', signature: 'bad-sig', payment_status: 'COMPLETE' },
+        {
+          m_payment_id: 'pay-1',
+          signature: 'bad-sig',
+          payment_status: 'COMPLETE',
+          amount_gross: '2000.00',
+        },
         '127.0.0.1',
       );
 
+      expect(paymentsRepo.save).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should reject an amount mismatch even with a valid signature', async () => {
+      paymentsRepo.findOne.mockResolvedValue(basePayment());
+      settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(true);
+
+      const body: Record<string, string> = {
+        m_payment_id: 'pay-1',
+        payment_status: 'COMPLETE',
+        pf_payment_id: 'pf-123',
+        merchant_id: 'merchant-1',
+        amount_gross: '1.00', // R1 vs R2000 expected
+      };
+      body.signature = signItn(body, 'test-pass');
+
+      await service.handlePayfastItn(body, '127.0.0.1');
+
+      expect(paymentsRepo.save).not.toHaveBeenCalled();
+      expect(paymentsRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should not re-emit when the payment is already COMPLETED (replay)', async () => {
+      paymentsRepo.findOne.mockResolvedValue({
+        ...basePayment(),
+        status: PaymentStatus.COMPLETED,
+      });
+      settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(true);
+
+      await service.handlePayfastItn(completeItn(), '127.0.0.1');
+
+      expect(paymentsRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should not complete when a concurrent ITN already won the update', async () => {
+      paymentsRepo.findOne.mockResolvedValue(basePayment());
+      settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(true);
+
+      const qb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      paymentsRepo.createQueryBuilder.mockReturnValue(qb as any);
+
+      await service.handlePayfastItn(completeItn(), '127.0.0.1');
+
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should reject when PayFast server validation fails', async () => {
+      paymentsRepo.findOne.mockResolvedValue(basePayment());
+      settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(false);
+
+      await service.handlePayfastItn(completeItn(), '127.0.0.1');
+
+      expect(paymentsRepo.save).not.toHaveBeenCalled();
+      expect(paymentsRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should mark FAILED on a valid FAILED ITN', async () => {
+      paymentsRepo.findOne.mockResolvedValue(basePayment());
+      settingsRepo.findOne.mockResolvedValue(mockSettings);
+      mockValidateItn.mockResolvedValue(true);
+
+      const body: Record<string, string> = {
+        m_payment_id: 'pay-1',
+        payment_status: 'FAILED',
+        pf_payment_id: 'pf-123',
+        merchant_id: 'merchant-1',
+        amount_gross: '2000.00',
+      };
+      body.signature = signItn(body, 'test-pass');
+
+      await service.handlePayfastItn(body, '127.0.0.1');
+
       expect(paymentsRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ status: PaymentStatus.FAILED }),
+      );
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        PAYMENT_EVENTS.FAILED,
+        expect.anything(),
       );
     });
   });

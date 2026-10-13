@@ -101,7 +101,7 @@ describe('PricingService', () => {
       rulesRepo.findOne.mockResolvedValue(existing);
       rulesRepo.save.mockResolvedValue({ ...existing, modifier_percent: 25 });
 
-      const result = await service.update('rule-1', { modifier_percent: 25 } as any);
+      const result = await service.update('rule-1', 'prop-1', { modifier_percent: 25 } as any);
 
       expect(result.modifier_percent).toBe(25);
     });
@@ -109,7 +109,7 @@ describe('PricingService', () => {
     it('should throw NotFoundException when rule does not exist', async () => {
       rulesRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.update('nope', {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.update('nope', 'prop-1', {} as any)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -119,7 +119,7 @@ describe('PricingService', () => {
       rulesRepo.findOne.mockResolvedValue(existing);
       rulesRepo.remove.mockResolvedValue(undefined);
 
-      await service.remove('rule-1');
+      await service.remove('rule-1', 'prop-1');
 
       expect(rulesRepo.remove).toHaveBeenCalledWith(existing);
     });
@@ -127,7 +127,7 @@ describe('PricingService', () => {
     it('should throw NotFoundException when rule does not exist', async () => {
       rulesRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.remove('nope')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('nope', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 

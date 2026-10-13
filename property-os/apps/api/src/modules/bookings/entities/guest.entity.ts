@@ -9,6 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import { Property } from '../../properties/entities/property.entity';
+import { encryptedPiiTransformer } from '../../guests/pii-encryption.transformer';
 
 @Entity('guests')
 @Index('idx_guests_property', ['property_id'])
@@ -37,7 +38,14 @@ export class Guest {
   @Column({ type: 'varchar', length: 2, nullable: true })
   country: string;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
+  // Encrypted at rest (audit S5). Widened from 50 to 255 to hold the
+  // base64 AES-256-GCM ciphertext; the transformer tolerates legacy plaintext.
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    transformer: encryptedPiiTransformer,
+  })
   id_number: string;
 
   @Column({ type: 'text', nullable: true })

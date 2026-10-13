@@ -75,9 +75,11 @@ export default function CalendarPage() {
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
     try {
+      // Fetch bookings that overlap the visible month, not just those starting in it
+      const overlapStart = new Date(year, month - 1, 1).toISOString().slice(0, 10);
       const [roomsRes, bookingsRes] = await Promise.all([
         api.get<Room[] | { data: Room[] }>(`/properties/${property.id}/rooms`),
-        api.get<{ data: Booking[] }>(`/properties/${property.id}/bookings?startDate=${startDate}&endDate=${endDate}&limit=100`),
+        api.get<{ data: Booking[] }>(`/properties/${property.id}/bookings?startDate=${overlapStart}&endDate=${endDate}&limit=200`),
       ]);
       setRooms(Array.isArray(roomsRes) ? roomsRes : (roomsRes.data || []));
       const bData = Array.isArray(bookingsRes) ? bookingsRes : (bookingsRes.data || []);

@@ -4,8 +4,11 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { User } from '../users/entities/user.entity';
+import { RefreshToken } from '../users/entities/refresh-token.entity';
+import { EmailProvider } from '../notifications/providers/email.provider';
 
 jest.mock('bcrypt');
 
@@ -31,6 +34,14 @@ const mockUsersRepo = {
   update: jest.fn(),
 };
 
+const mockRefreshRepo = {
+  findOne: jest.fn(),
+  create: jest.fn((v) => v),
+  save: jest.fn((v) => Promise.resolve(v)),
+  update: jest.fn(),
+  delete: jest.fn(),
+};
+
 const mockJwtService = {
   sign: jest.fn().mockReturnValue('mock-token'),
   verify: jest.fn(),
@@ -38,6 +49,10 @@ const mockJwtService = {
 
 const mockConfigService = {
   get: jest.fn().mockReturnValue('test-refresh-secret'),
+};
+
+const mockEmailProvider = {
+  send: jest.fn().mockResolvedValue({ success: true, providerRef: 'test' }),
 };
 
 describe('AuthService', () => {
@@ -48,8 +63,10 @@ describe('AuthService', () => {
       providers: [
         AuthService,
         { provide: getRepositoryToken(User), useValue: mockUsersRepo },
+        { provide: getRepositoryToken(RefreshToken), useValue: mockRefreshRepo },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: EmailProvider, useValue: mockEmailProvider },
       ],
     }).compile();
 
@@ -134,14 +151,31 @@ describe('AuthService', () => {
   });
 
   describe('refreshTokens', () => {
+    const hashOf = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
+
+    const validRow = () => ({
+      id: 'jti-1',
+      user_id: 'user-1',
+      family_id: 'fam-1',
+      token_hash: hashOf('valid-refresh'),
+      expires_at: new Date(Date.now() + 3600_000),
+      revoked_at: null,
+      replaced_by: null,
+    });
+
     it('should return new tokens for valid refresh token', async () => {
-      mockJwtService.verify.mockReturnValue({ sub: 'user-1', email: 'test@example.com', role: 'owner' });
+      mockJwtService.verify.mockReturnValue({ sub: 'user-1', jti: 'jti-1', family: 'fam-1' });
+      mockRefreshRepo.findOne.mockResolvedValue(validRow());
       mockUsersRepo.findOne.mockResolvedValue(mockUser);
 
       const result = await service.refreshTokens('valid-refresh');
 
       expect(result.accessToken).toBe('mock-token');
       expect(result.refreshToken).toBe('mock-token');
+      // old row rotated (revoked)
+      expect(mockRefreshRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'jti-1', revoked_at: expect.any(Date) }),
+      );
     });
 
     it('should throw when refresh token is invalid', async () => {
@@ -150,8 +184,20 @@ describe('AuthService', () => {
       await expect(service.refreshTokens('bad-token')).rejects.toThrow(UnauthorizedException);
     });
 
+    it('should revoke the family and throw on reuse of a revoked token', async () => {
+      mockJwtService.verify.mockReturnValue({ sub: 'user-1', jti: 'jti-1', family: 'fam-1' });
+      mockRefreshRepo.findOne.mockResolvedValue({ ...validRow(), revoked_at: new Date() });
+
+      await expect(service.refreshTokens('valid-refresh')).rejects.toThrow(UnauthorizedException);
+      expect(mockRefreshRepo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ family_id: 'fam-1' }),
+        expect.objectContaining({ revoked_at: expect.any(Date) }),
+      );
+    });
+
     it('should throw when user is inactive', async () => {
-      mockJwtService.verify.mockReturnValue({ sub: 'user-1' });
+      mockJwtService.verify.mockReturnValue({ sub: 'user-1', jti: 'jti-1', family: 'fam-1' });
+      mockRefreshRepo.findOne.mockResolvedValue(validRow());
       mockUsersRepo.findOne.mockResolvedValue({ ...mockUser, is_active: false });
 
       await expect(service.refreshTokens('valid-refresh')).rejects.toThrow(UnauthorizedException);
@@ -220,21 +266,37 @@ describe('AuthService', () => {
     });
   });
 
+  describe('forgotPassword', () => {
+    it('should send a reset email and not log the raw token', async () => {
+      const user = { ...mockUser };
+      mockUsersRepo.findOne.mockResolvedValue(user);
+      mockUsersRepo.save.mockResolvedValue(user);
+
+      const result = await service.forgotPassword('test@example.com');
+
+      expect(result.message).toContain('reset link has been sent');
+      expect(mockEmailProvider.send).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'test@example.com' }),
+      );
+      // A hash is stored, not the raw token
+      expect(user.password_reset_token).toMatch(/^[a-f0-9]{64}$/);
+    });
+  });
+
   describe('resetPassword', () => {
     it('should throw when token is invalid', async () => {
-      mockUsersRepo.find.mockResolvedValue([]);
+      mockUsersRepo.findOne.mockResolvedValue(null);
 
       await expect(service.resetPassword('bad-token', 'newpass')).rejects.toThrow(BadRequestException);
     });
 
-    it('should reset password when token is valid', async () => {
+    it('should reset password and revoke sessions when token is valid', async () => {
       const userWithToken = {
         ...mockUser,
         password_reset_token: 'hashed-token',
         password_reset_expires: new Date(Date.now() + 3600_000),
       };
-      mockUsersRepo.find.mockResolvedValue([userWithToken]);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockUsersRepo.findOne.mockResolvedValue(userWithToken);
       (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-pass');
       mockUsersRepo.save.mockResolvedValue(userWithToken);
 
@@ -242,6 +304,11 @@ describe('AuthService', () => {
 
       expect(result.message).toContain('reset successfully');
       expect(bcrypt.hash).toHaveBeenCalledWith('NewP@ss123', 12);
+      // all refresh sessions revoked
+      expect(mockRefreshRepo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ user_id: 'user-1' }),
+        expect.objectContaining({ revoked_at: expect.any(Date) }),
+      );
     });
   });
 });

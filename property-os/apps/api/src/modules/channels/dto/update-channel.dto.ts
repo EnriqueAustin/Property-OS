@@ -3,11 +3,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   Min,
 } from 'class-validator';
 import { ChannelStatus } from '../entities/channel.entity';
+import { IsSafeUrl } from '../../../common/security/safe-fetch';
 
 export class UpdateChannelDto {
   @IsOptional()
@@ -19,7 +19,7 @@ export class UpdateChannelDto {
   status?: ChannelStatus;
 
   @IsOptional()
-  @IsUrl()
+  @IsSafeUrl()
   icalImportUrl?: string;
 
   @IsOptional()

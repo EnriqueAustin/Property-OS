@@ -4,11 +4,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   Min,
 } from 'class-validator';
 import { ChannelType } from '../entities/channel.entity';
+import { IsSafeUrl } from '../../../common/security/safe-fetch';
 
 export class CreateChannelDto {
   propertyId: string;
@@ -21,7 +21,7 @@ export class CreateChannelDto {
   name: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsSafeUrl()
   icalImportUrl?: string;
 
   @IsOptional()

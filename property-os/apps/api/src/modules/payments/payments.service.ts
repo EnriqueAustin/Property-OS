@@ -23,6 +23,7 @@ import {
   buildPayfastRedirectUrl,
   verifyPayfastSignature,
   isValidPayfastHost,
+  validatePayfastItn,
 } from './utils/payfast.util';
 import { PAYMENT_EVENTS, PaymentCompletedEvent, PaymentFailedEvent } from './events/payment.events';
 
@@ -163,12 +164,6 @@ export class PaymentsService {
   async handlePayfastItn(body: Record<string, string>, sourceIp: string) {
     this.logger.log(`PayFast ITN received from ${sourceIp}`);
 
-    const sandbox = this.config.get<string>('PAYFAST_SANDBOX') === 'true';
-    if (!sandbox && !isValidPayfastHost(sourceIp)) {
-      this.logger.warn(`ITN rejected: invalid source IP ${sourceIp}`);
-      return;
-    }
-
     const paymentId = body.m_payment_id;
     if (!paymentId) {
       this.logger.warn('ITN missing m_payment_id');
@@ -184,43 +179,114 @@ export class PaymentsService {
     }
 
     const settings = await this.getSettings(payment.property_id);
+
+    // (e) IP allow-list. Only bypass it outside production, or when THIS
+    // property is explicitly in PayFast sandbox mode. A global sandbox flag
+    // must never open the allow-list in production.
+    const nodeEnv = this.config.get<string>('NODE_ENV') || process.env.NODE_ENV;
+    const isProduction = nodeEnv === 'production';
+    const allowIpSkip = !isProduction || settings.payfast_sandbox === true;
+    if (!allowIpSkip && !isValidPayfastHost(sourceIp)) {
+      this.logger.warn(`ITN rejected: invalid source IP ${sourceIp}`);
+      return;
+    }
+
+    // (d) Signature check. A bad signature is rejected and logged only — it must
+    // never mutate the real payment (otherwise anyone could grief it to FAILED).
     const signatureValid = verifyPayfastSignature(
       body,
       settings.payfast_passphrase,
     );
-
     if (!signatureValid) {
-      this.logger.warn(`ITN signature mismatch for payment ${paymentId}`);
-      payment.status = PaymentStatus.FAILED;
-      payment.failed_at = new Date();
-      payment.provider_data = { ...payment.provider_data, itn: body, error: 'signature_mismatch' };
-      await this.paymentsRepo.save(payment);
+      this.logger.warn(
+        `ITN signature mismatch for payment ${paymentId} — rejected, payment left unchanged`,
+      );
+      return;
+    }
+
+    // (a) Amount must match the payment exactly (compare in cents to avoid
+    // floating-point drift). Reject any mismatch.
+    const grossRaw = body.amount_gross;
+    if (grossRaw === undefined || grossRaw === null || grossRaw === '') {
+      this.logger.warn(`ITN missing amount_gross for payment ${paymentId} — rejected`);
+      return;
+    }
+    const expectedCents = Math.round(Number(payment.amount) * 100);
+    const receivedCents = Math.round(Number(grossRaw) * 100);
+    if (!Number.isFinite(receivedCents) || receivedCents !== expectedCents) {
+      this.logger.warn(
+        `ITN amount mismatch for payment ${paymentId}: expected ${expectedCents}c, got ${grossRaw} — rejected`,
+      );
+      return;
+    }
+
+    // (b) Server-to-server validation with PayFast. Only "VALID" is trusted.
+    const serverValidated = await validatePayfastItn(body, settings.payfast_sandbox);
+    if (!serverValidated) {
+      this.logger.warn(
+        `ITN server validation failed for payment ${paymentId} — rejected`,
+      );
+      return;
+    }
+
+    // (c) Idempotency. A replayed ITN for an already-completed payment is
+    // acknowledged with 200 but not re-processed (no duplicate events).
+    if (payment.status === PaymentStatus.COMPLETED) {
+      this.logger.log(
+        `ITN replay for already-completed payment ${paymentId} — ignored`,
+      );
       return;
     }
 
     const payfastStatus = body.payment_status;
-    payment.provider_ref = body.pf_payment_id;
-    payment.provider_data = { ...payment.provider_data, itn: body };
+    const mergedProviderData = { ...(payment.provider_data || {}), itn: body };
 
     if (payfastStatus === 'COMPLETE') {
-      payment.status = PaymentStatus.COMPLETED;
-      payment.paid_at = new Date();
+      // Conditional, atomic transition so two concurrent COMPLETE ITNs can't
+      // both win and double-emit. Only the row still not COMPLETED is updated.
+      const result = await this.paymentsRepo
+        .createQueryBuilder()
+        .update(Payment)
+        .set({
+          status: PaymentStatus.COMPLETED,
+          paid_at: new Date(),
+          provider_ref: body.pf_payment_id,
+          provider_data: mergedProviderData as any,
+        })
+        .where('id = :id', { id: paymentId })
+        .andWhere('status != :completed', { completed: PaymentStatus.COMPLETED })
+        .execute();
+
+      if (!result.affected) {
+        this.logger.log(
+          `ITN race for payment ${paymentId}: already completed concurrently — not re-emitting`,
+        );
+        return;
+      }
+
       this.logger.log(`Payment ${paymentId} completed via PayFast`);
       this.eventEmitter.emit(
         PAYMENT_EVENTS.COMPLETED,
         new PaymentCompletedEvent(payment.booking_id, Number(payment.amount), 'PayFast'),
       );
-    } else if (payfastStatus === 'FAILED') {
+      return;
+    }
+
+    payment.provider_ref = body.pf_payment_id;
+    payment.provider_data = mergedProviderData;
+
+    if (payfastStatus === 'FAILED') {
       payment.status = PaymentStatus.FAILED;
       payment.failed_at = new Date();
+      await this.paymentsRepo.save(payment);
       this.eventEmitter.emit(
         PAYMENT_EVENTS.FAILED,
         new PaymentFailedEvent(payment.booking_id, Number(payment.amount), 'PayFast payment failed'),
       );
-    } else {
-      payment.status = PaymentStatus.PROCESSING;
+      return;
     }
 
+    payment.status = PaymentStatus.PROCESSING;
     await this.paymentsRepo.save(payment);
   }
 

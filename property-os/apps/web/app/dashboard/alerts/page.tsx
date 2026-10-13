@@ -57,6 +57,7 @@ export default function AlertsPage() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   const load = async (page = 1) => {
     if (!property) return;
@@ -71,7 +72,7 @@ export default function AlertsPage() {
       setMeta(ar?.meta || { page: 1, totalPages: 1, total: 0 });
       const cr = countsRes as any;
       setCounts(cr?.data || cr || { active: 0, acknowledged: 0, dismissed: 0 });
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Failed to load alerts'); }
     setLoading(false);
   };
 
@@ -82,7 +83,7 @@ export default function AlertsPage() {
       const res = await api.get<AlertSettingsData>(`/properties/${property.id}/alerts/settings`);
       const r = res as any;
       setSettings(r?.data || r);
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Failed to load settings'); }
     setLoadingSettings(false);
   };
 
@@ -93,7 +94,7 @@ export default function AlertsPage() {
     try {
       await api.patch(`/properties/${property?.id}/alerts/${id}`, { status });
       load(meta.page);
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Failed to update alert'); }
   };
 
   const runScan = async () => {
@@ -102,7 +103,7 @@ export default function AlertsPage() {
     try {
       await api.post(`/properties/${property.id}/alerts/scan`);
       await load();
-    } catch {}
+    } catch (err: any) { setFetchError(err.message || 'Scan failed'); }
     setScanning(false);
   };
 
@@ -150,6 +151,8 @@ export default function AlertsPage() {
           {scanning ? 'Scanning...' : 'Run Scan Now'}
         </button>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">

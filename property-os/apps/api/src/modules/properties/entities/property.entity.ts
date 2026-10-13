@@ -98,6 +98,9 @@ export class Property {
   @Column({ type: 'boolean', default: false })
   is_published: boolean;
 
+  @Column({ type: 'varchar', length: 20, default: 'hotel' })
+  booking_mode: string;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   logo_url: string;
 

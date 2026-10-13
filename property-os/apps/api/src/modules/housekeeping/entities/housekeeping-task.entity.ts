@@ -16,6 +16,7 @@ export enum TaskStatus {
   PENDING = 'pending',
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
+  INSPECTED = 'inspected',
   SKIPPED = 'skipped',
 }
 

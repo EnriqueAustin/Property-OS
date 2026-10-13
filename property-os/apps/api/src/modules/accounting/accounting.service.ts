@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
@@ -69,6 +71,7 @@ export class AccountingService {
     propertyId: string,
     providerType: AccountingProviderType,
     redirectUri: string,
+    userId?: string,
   ): Promise<{ authUrl: string; connectionId: string }> {
     const existing = await this.connectionsRepo.findOne({
       where: { property_id: propertyId, provider_type: providerType },
@@ -88,10 +91,19 @@ export class AccountingService {
       },
     });
     connection.status = AccountingConnectionStatus.PENDING;
+
+    // Bind a random, single-use state to this connection for CSRF protection.
+    const state = randomBytes(32).toString('hex');
+    connection.oauth_state = state;
+    connection.oauth_state_expires_at = new Date(Date.now() + 15 * 60 * 1000);
+    connection.oauth_state_user_id = userId ?? null;
+
     const saved = await this.connectionsRepo.save(connection);
 
     const provider = this.registry.getOrThrow(providerType);
-    const authUrl = provider.getAuthUrl(redirectUri, saved.id);
+    // The state carries the connection id so the frontend knows which
+    // connection the callback belongs to, plus the random nonce we verify.
+    const authUrl = provider.getAuthUrl(redirectUri, `${saved.id}.${state}`);
 
     return { authUrl, connectionId: saved.id };
   }
@@ -100,10 +112,43 @@ export class AccountingService {
     connectionId: string,
     code: string,
     redirectUri: string,
+    propertyId: string,
+    state?: string,
+    userId?: string,
   ): Promise<AccountingConnection> {
-    const connection = await this.getConnection(connectionId);
-    const provider = this.registry.getOrThrow(connection.provider_type);
+    const connection = await this.getConnection(connectionId, propertyId);
 
+    // Verify the CSRF state. It must be present, match the stored single-use
+    // value, be unexpired, and (when known) belong to the initiating user.
+    const presentedNonce = this.extractStateNonce(state, connectionId);
+    if (
+      !connection.oauth_state ||
+      !presentedNonce ||
+      !this.safeEqual(presentedNonce, connection.oauth_state)
+    ) {
+      throw new ForbiddenException('Invalid OAuth state');
+    }
+    if (
+      !connection.oauth_state_expires_at ||
+      connection.oauth_state_expires_at.getTime() < Date.now()
+    ) {
+      throw new ForbiddenException('OAuth state has expired');
+    }
+    if (
+      connection.oauth_state_user_id &&
+      userId &&
+      connection.oauth_state_user_id !== userId
+    ) {
+      throw new ForbiddenException('OAuth state does not belong to this user');
+    }
+
+    // Single-use: clear the state before exchanging the code.
+    connection.oauth_state = null;
+    connection.oauth_state_expires_at = null;
+    connection.oauth_state_user_id = null;
+    await this.connectionsRepo.save(connection);
+
+    const provider = this.registry.getOrThrow(connection.provider_type);
     const tokens = await provider.handleCallback(code, redirectUri);
     return this.saveTokens(connection, tokens);
   }
@@ -116,16 +161,20 @@ export class AccountingService {
     return connections.map((c) => this.sanitizeConnection(c));
   }
 
-  async getConnectionDetail(connectionId: string): Promise<AccountingConnection> {
-    const conn = await this.getConnection(connectionId);
+  async getConnectionDetail(
+    connectionId: string,
+    propertyId: string,
+  ): Promise<AccountingConnection> {
+    const conn = await this.getConnection(connectionId, propertyId);
     return this.sanitizeConnection(conn);
   }
 
   async updateSettings(
     connectionId: string,
     dto: UpdateConnectionSettingsDto,
+    propertyId: string,
   ): Promise<AccountingConnection> {
-    const conn = await this.getConnection(connectionId);
+    const conn = await this.getConnection(connectionId, propertyId);
     conn.settings = {
       ...conn.settings,
       ...(dto.defaultRevenueAccountCode !== undefined && { default_revenue_account_code: dto.defaultRevenueAccountCode }),
@@ -139,8 +188,8 @@ export class AccountingService {
     return this.sanitizeConnection(saved);
   }
 
-  async disconnect(connectionId: string): Promise<void> {
-    const conn = await this.getConnection(connectionId);
+  async disconnect(connectionId: string, propertyId: string): Promise<void> {
+    const conn = await this.getConnection(connectionId, propertyId);
     conn.status = AccountingConnectionStatus.DISCONNECTED;
     conn.access_token_encrypted = null as any;
     conn.refresh_token_encrypted = null as any;
@@ -148,8 +197,8 @@ export class AccountingService {
     await this.connectionsRepo.save(conn);
   }
 
-  async getAccounts(connectionId: string) {
-    const conn = await this.getConnection(connectionId);
+  async getAccounts(connectionId: string, propertyId: string) {
+    const conn = await this.getConnection(connectionId, propertyId);
     await this.ensureTokenFresh(conn);
     const provider = this.registry.getOrThrow(conn.provider_type);
     return provider.getAccounts(conn);
@@ -160,8 +209,9 @@ export class AccountingService {
   async syncInvoice(
     connectionId: string,
     invoiceId: string,
+    propertyId?: string,
   ): Promise<AccountingMapping> {
-    const conn = await this.getConnection(connectionId);
+    const conn = await this.getConnection(connectionId, propertyId);
     if (conn.status !== AccountingConnectionStatus.ACTIVE) {
       throw new BadRequestException('Connection is not active');
     }
@@ -221,8 +271,9 @@ export class AccountingService {
   async syncPayment(
     connectionId: string,
     paymentId: string,
+    propertyId?: string,
   ): Promise<AccountingMapping> {
-    const conn = await this.getConnection(connectionId);
+    const conn = await this.getConnection(connectionId, propertyId);
     if (conn.status !== AccountingConnectionStatus.ACTIVE) {
       throw new BadRequestException('Connection is not active');
     }
@@ -409,12 +460,47 @@ export class AccountingService {
 
   // --- Internal Helpers ---
 
-  private async getConnection(connectionId: string): Promise<AccountingConnection> {
+  private async getConnection(
+    connectionId: string,
+    propertyId?: string,
+  ): Promise<AccountingConnection> {
     const conn = await this.connectionsRepo.findOne({
-      where: { id: connectionId },
+      where: propertyId
+        ? { id: connectionId, property_id: propertyId }
+        : { id: connectionId },
     });
     if (!conn) throw new NotFoundException('Accounting connection not found');
     return conn;
+  }
+
+  /**
+   * The state we send to the provider is `<connectionId>.<nonce>`. The provider
+   * echoes it back on the callback. Return the nonce only when the connection
+   * id segment matches the connection we are completing.
+   */
+  private extractStateNonce(
+    state: string | undefined,
+    connectionId: string,
+  ): string | null {
+    if (!state) return null;
+    const sep = state.indexOf('.');
+    if (sep === -1) {
+      // Legacy/plain state: treat the whole value as the nonce.
+      return state;
+    }
+    const idPart = state.slice(0, sep);
+    const noncePart = state.slice(sep + 1);
+    if (idPart !== connectionId) return null;
+    return noncePart || null;
+  }
+
+  private safeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
   }
 
   private async ensureTokenFresh(conn: AccountingConnection): Promise<void> {
@@ -538,6 +624,9 @@ export class AccountingService {
     const sanitized = { ...conn };
     delete (sanitized as any).access_token_encrypted;
     delete (sanitized as any).refresh_token_encrypted;
+    delete (sanitized as any).oauth_state;
+    delete (sanitized as any).oauth_state_expires_at;
+    delete (sanitized as any).oauth_state_user_id;
     return sanitized;
   }
 }

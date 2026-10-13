@@ -20,6 +20,7 @@ import { ChannelsModule } from './modules/channels/channels.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { User } from './modules/users/entities/user.entity';
+import { RefreshToken } from './modules/users/entities/refresh-token.entity';
 import { Property } from './modules/properties/entities/property.entity';
 import { PropertyUser } from './modules/properties/entities/property-user.entity';
 import { RoomType } from './modules/inventory/entities/room-type.entity';
@@ -45,6 +46,7 @@ import { PricingRule } from './modules/pricing/entities/pricing-rule.entity';
 import { HousekeepingTask } from './modules/housekeeping/entities/housekeeping-task.entity';
 import { GuestConsent } from './modules/guests/entities/guest-consent.entity';
 import { DataRetentionSettings } from './modules/guests/entities/data-retention-settings.entity';
+import { ErasureRequest } from './modules/guests/entities/erasure-request.entity';
 import { GuestsModule } from './modules/guests/guests.module';
 import { SmartAlert } from './modules/alerts/entities/smart-alert.entity';
 import { AlertSettings } from './modules/alerts/entities/alert-settings.entity';
@@ -71,11 +73,6 @@ import { PropertyGuardModule } from './common/guards/property-guard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { throttlerConfig } from './common/throttler/throttler.config';
-import { AddGiSTDoubleBookingConstraint1716950000000 } from './migrations/1716950000000-AddGiSTDoubleBookingConstraint';
-import { InitialSchema1716900000000 } from './migrations/1716900000000-InitialSchema';
-import { AddBookingGroupColumns1717000000000 } from './migrations/1717000000000-AddBookingGroupColumns';
-import { AddRemainingTables1717100000000 } from './migrations/1717100000000-AddRemainingTables';
-import { AddAccountingTables1717200000000 } from './migrations/1717200000000-AddAccountingTables';
 
 @Module({
   imports: [
@@ -89,7 +86,18 @@ import { AddAccountingTables1717200000000 } from './migrations/1717200000000-Add
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
-      serveStaticOptions: { index: false },
+      serveStaticOptions: {
+        index: false,
+        // Harden user-uploaded content served from the API origin (audit S8).
+        // Uploads are magic-byte validated to be genuine images, but we still
+        // prevent MIME sniffing and any HTML/script execution if a file is ever
+        // interpreted as a document.
+        setHeaders: (res: any) => {
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+          res.setHeader('Content-Disposition', 'inline');
+        },
+      },
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -102,6 +110,7 @@ import { AddAccountingTables1717200000000 } from './migrations/1717200000000-Add
         database: configService.get<string>('DB_NAME'),
         entities: [
           User,
+          RefreshToken,
           Property,
           PropertyUser,
           RoomType,
@@ -127,6 +136,7 @@ import { AddAccountingTables1717200000000 } from './migrations/1717200000000-Add
           HousekeepingTask,
           GuestConsent,
           DataRetentionSettings,
+          ErasureRequest,
           SmartAlert,
           AlertSettings,
           FolioItem,
@@ -143,13 +153,10 @@ import { AddAccountingTables1717200000000 } from './migrations/1717200000000-Add
         ],
         synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true',
         migrationsRun: true,
-        migrations: [
-          InitialSchema1716900000000,
-          AddGiSTDoubleBookingConstraint1716950000000,
-          AddBookingGroupColumns1717000000000,
-          AddRemainingTables1717100000000,
-          AddAccountingTables1717200000000,
-        ],
+        // Load every migration by glob so new files (AddRoomPhotos,
+        // AddBookingMode, PII encryption, erasure requests, …) register
+        // automatically instead of having to be hand-listed here (audit P1).
+        migrations: [join(__dirname, 'migrations', '*{.ts,.js}')],
         extra: {
           max: parseInt(configService.get<string>('DB_POOL_MAX') || '20', 10),
           idleTimeoutMillis: 30000,

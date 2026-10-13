@@ -51,8 +51,14 @@ export class HousekeepingService {
     return qb.getMany();
   }
 
-  async update(taskId: string, dto: UpdateHousekeepingTaskDto): Promise<HousekeepingTask> {
-    const task = await this.tasksRepo.findOne({ where: { id: taskId } });
+  async update(
+    taskId: string,
+    propertyId: string,
+    dto: UpdateHousekeepingTaskDto,
+  ): Promise<HousekeepingTask> {
+    const task = await this.tasksRepo.findOne({
+      where: { id: taskId, property_id: propertyId },
+    });
     if (!task) throw new NotFoundException('Task not found');
 
     if (dto.status === TaskStatus.COMPLETED && task.status !== TaskStatus.COMPLETED) {
@@ -62,8 +68,10 @@ export class HousekeepingService {
     return this.tasksRepo.save(task);
   }
 
-  async remove(taskId: string): Promise<void> {
-    const task = await this.tasksRepo.findOne({ where: { id: taskId } });
+  async remove(taskId: string, propertyId: string): Promise<void> {
+    const task = await this.tasksRepo.findOne({
+      where: { id: taskId, property_id: propertyId },
+    });
     if (!task) throw new NotFoundException('Task not found');
     await this.tasksRepo.remove(task);
   }
@@ -136,6 +144,47 @@ export class HousekeepingService {
         totalCost: parseFloat(r.total_cost),
       })),
       totalMaintenanceCost: result.reduce((s, r) => s + parseFloat(r.total_cost), 0),
+    };
+  }
+
+  async getPerformanceMetrics(propertyId: string) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const completedTasks = await this.tasksRepo
+      .createQueryBuilder('t')
+      .select('t.assigned_to', 'staff')
+      .addSelect('COUNT(*)', 'total_completed')
+      .addSelect('AVG(EXTRACT(EPOCH FROM (t.completed_at - t.created_at)) / 60)', 'avg_minutes')
+      .where('t.property_id = :propertyId', { propertyId })
+      .andWhere('t.status = :status', { status: 'completed' })
+      .andWhere('t.completed_at IS NOT NULL')
+      .andWhere('t.due_date >= :since', { since: thirtyDaysAgo })
+      .groupBy('t.assigned_to')
+      .getRawMany();
+
+    const dailyTrend = await this.tasksRepo
+      .createQueryBuilder('t')
+      .select('t.due_date', 'date')
+      .addSelect('COUNT(*) FILTER (WHERE t.status = \'completed\')', 'completed')
+      .addSelect('COUNT(*)', 'total')
+      .where('t.property_id = :propertyId', { propertyId })
+      .andWhere('t.due_date >= :since', { since: thirtyDaysAgo })
+      .andWhere('t.task_type != :type', { type: 'maintenance' })
+      .groupBy('t.due_date')
+      .orderBy('t.due_date', 'ASC')
+      .getRawMany();
+
+    return {
+      staffPerformance: completedTasks.map((r) => ({
+        staff: r.staff || 'Unassigned',
+        totalCompleted: parseInt(r.total_completed, 10),
+        avgMinutes: r.avg_minutes ? Math.round(parseFloat(r.avg_minutes)) : null,
+      })),
+      dailyTrend: dailyTrend.map((r) => ({
+        date: r.date,
+        completed: parseInt(r.completed, 10),
+        total: parseInt(r.total, 10),
+      })),
     };
   }
 

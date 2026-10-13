@@ -154,6 +154,16 @@ export class InvoicesService {
     return invoice;
   }
 
+  async getInvoiceForBooking(bookingId: string, propertyId: string) {
+    const invoice = await this.invoicesRepo.findOne({
+      where: { booking_id: bookingId, property_id: propertyId },
+      relations: ['booking'],
+      order: { created_at: 'DESC' },
+    });
+    if (!invoice) throw new NotFoundException('No invoice found for this booking');
+    return invoice;
+  }
+
   async getInvoiceByNumber(invoiceNumber: string, email?: string) {
     const invoice = await this.invoicesRepo.findOne({
       where: { invoice_number: invoiceNumber },

@@ -37,6 +37,7 @@ interface BookingDetails {
   room: { name: string; number: string };
   property: {
     name: string;
+    slug?: string;
     address: string;
     city: string;
     phone: string;
@@ -99,6 +100,49 @@ export default function GuestPortalPage() {
   const [erasureRequesting, setErasureRequesting] = useState(false);
   const [erasureConfirm, setErasureConfirm] = useState(false);
   const [erasureComplete, setErasureComplete] = useState(false);
+
+  // Review state
+  const [showReview, setShowReview] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+  const [reviewForm, setReviewForm] = useState({
+    overallRating: 5,
+    cleanlinessRating: 5,
+    comfortRating: 5,
+    locationRating: 5,
+    valueRating: 5,
+    serviceRating: 5,
+    comment: '',
+  });
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!booking) return;
+    setReviewSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/public/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          referenceNumber: booking.referenceNumber,
+          email,
+          ...reviewForm,
+          comment: reviewForm.comment || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || 'Failed to submit review');
+      }
+      setReviewSuccess(true);
+      setShowReview(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit review');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   const lookupBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -638,6 +682,123 @@ export default function GuestPortalPage() {
                     >
                       Cancel
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Leave a Review */}
+            {booking.status === 'checked_out' && !reviewSuccess && (
+              <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl border border-amber-200 p-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-amber-100 rounded-xl">
+                    <span className="text-2xl">⭐</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900">How was your stay?</h3>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Your feedback helps {booking.property.name} improve and helps future guests make informed decisions.
+                    </p>
+                    <button
+                      onClick={() => setShowReview(true)}
+                      className="mt-3 px-5 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition"
+                    >
+                      Write a Review
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {reviewSuccess && (
+              <div className="p-4 rounded-2xl bg-green-50 text-green-700 text-sm flex items-center gap-2 border border-green-200">
+                <CheckCircle className="w-5 h-5" />
+                Thank you for your review! It will be published after moderation.
+              </div>
+            )}
+
+            {/* Review Modal */}
+            {showReview && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 mx-4 max-h-[90vh] overflow-y-auto">
+                  <h2 className="text-lg font-semibold text-slate-900 mb-1">Review Your Stay</h2>
+                  <p className="text-sm text-slate-500 mb-5">at {booking.property.name}</p>
+                  <form onSubmit={handleReviewSubmit} className="space-y-4">
+                    {[
+                      { key: 'overallRating', label: 'Overall' },
+                      { key: 'cleanlinessRating', label: 'Cleanliness' },
+                      { key: 'comfortRating', label: 'Comfort' },
+                      { key: 'serviceRating', label: 'Service' },
+                      { key: 'locationRating', label: 'Location' },
+                      { key: 'valueRating', label: 'Value for Money' },
+                    ].map(({ key, label }) => (
+                      <div key={key}>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-sm font-medium text-slate-700">{label}</label>
+                          <span className="text-sm text-slate-500">{(reviewForm as any)[key]}/5</span>
+                        </div>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setReviewForm({ ...reviewForm, [key]: star })}
+                              className={`text-2xl transition ${star <= (reviewForm as any)[key] ? 'text-amber-400' : 'text-slate-200'} hover:text-amber-300`}
+                            >
+                              ★
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Your comments (optional)</label>
+                      <textarea
+                        value={reviewForm.comment}
+                        onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                        rows={4}
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                        placeholder="Tell future guests about your experience..."
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowReview(false)}
+                        className="flex-1 py-2.5 border border-slate-300 rounded-xl text-sm font-medium hover:bg-slate-50 transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={reviewSubmitting}
+                        className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition"
+                      >
+                        {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Book Again */}
+            {booking.status === 'checked_out' && booking.property.slug && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-blue-100 rounded-xl">
+                    <Calendar className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900">Enjoyed your stay?</h3>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Book your next visit to {booking.property.name} — we&apos;d love to have you back!
+                    </p>
+                    <a
+                      href={`/book/${booking.property.slug}`}
+                      className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+                    >
+                      Book Again
+                    </a>
                   </div>
                 </div>
               </div>

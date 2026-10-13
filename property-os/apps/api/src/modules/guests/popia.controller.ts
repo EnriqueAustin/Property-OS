@@ -20,6 +20,8 @@ import {
   GrantConsentDto,
   WithdrawConsentDto,
   ErasureRequestDto,
+  ConfirmErasureDto,
+  CancelErasureDto,
   UpdateRetentionSettingsDto,
 } from './dto/consent.dto';
 
@@ -66,6 +68,20 @@ export class PopiaController {
   @Post('public/data/erasure')
   requestErasure(@Body() dto: ErasureRequestDto) {
     return this.popia.requestErasure(dto.referenceNumber, dto.email);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Post('public/data/erasure/confirm')
+  confirmErasure(@Body() dto: ConfirmErasureDto) {
+    return this.popia.confirmErasure(dto.token);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Post('public/data/erasure/cancel')
+  cancelErasure(@Body() dto: CancelErasureDto) {
+    return this.popia.cancelErasure(dto.referenceNumber, dto.email);
   }
 
   // --- Admin endpoints (auth required) ---

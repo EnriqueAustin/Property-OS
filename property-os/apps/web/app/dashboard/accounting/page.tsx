@@ -46,6 +46,7 @@ export default function AccountingPage() {
   const [selectedProvider, setSelectedProvider] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   const fetchData = async () => {
     if (!property) return;
@@ -56,7 +57,7 @@ export default function AccountingPage() {
       ]);
       setConnections(Array.isArray(connData) ? connData : []);
       setSyncLogs(Array.isArray(logData) ? logData : []);
-    } catch { /* empty */ } finally {
+    } catch (err: any) { setFetchError(err.message || 'Failed to load data'); } finally {
       setLoading(false);
     }
   };
@@ -96,7 +97,7 @@ export default function AccountingPage() {
     try {
       await api.post(`/properties/${property.id}/accounting/connections/${connectionId}/sync`);
       fetchData();
-    } catch { /* empty */ }
+    } catch (err: any) { setFetchError(err.message || 'Sync failed'); }
   };
 
   const statusIcon = (status: string) => {
@@ -132,6 +133,8 @@ export default function AccountingPage() {
           <Plus size={16} /> Connect
         </button>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       {showConnect && (
         <div className="bg-white rounded-xl border border-border p-6 mb-6 shadow-sm">

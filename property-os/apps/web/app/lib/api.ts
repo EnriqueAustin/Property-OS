@@ -3,22 +3,66 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 class ApiClient {
   private token: string | null = null;
   private refreshPromise: Promise<void> | null = null;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   setToken(token: string | null) {
     this.token = token;
     if (typeof window === 'undefined') return;
     if (token) {
       localStorage.setItem('pos_token', token);
+      this.scheduleProactiveRefresh(token);
     } else {
       localStorage.removeItem('pos_token');
       localStorage.removeItem('pos_refresh_token');
+      if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
     }
+  }
+
+  private scheduleProactiveRefresh(token: string) {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1] || '{}'));
+      const exp = payload.exp;
+      if (!exp) return;
+      // Refresh 2 minutes before expiry
+      const msUntilRefresh = (exp * 1000) - Date.now() - 120_000;
+      if (msUntilRefresh <= 0) {
+        this.tryRefresh();
+        return;
+      }
+      this.refreshTimer = setTimeout(() => {
+        this.tryRefresh().then((ok) => {
+          if (!ok && typeof window !== 'undefined') {
+            const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.href = `/login?expired=1&returnTo=${returnTo}`;
+          }
+        });
+      }, msUntilRefresh);
+    } catch { /* malformed token, skip proactive refresh */ }
+  }
+
+  /** Revoke the current refresh-token session server-side, then clear locally. */
+  async logout(): Promise<void> {
+    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('pos_refresh_token') : null;
+    if (refreshToken) {
+      try {
+        await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+      } catch {
+        /* best-effort — clear locally regardless */
+      }
+    }
+    this.setToken(null);
   }
 
   getToken(): string | null {
     if (this.token) return this.token;
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem('pos_token');
+      if (this.token && !this.refreshTimer) this.scheduleProactiveRefresh(this.token);
     }
     return this.token;
   }

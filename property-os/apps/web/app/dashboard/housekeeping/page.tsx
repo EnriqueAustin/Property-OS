@@ -48,6 +48,7 @@ const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending', color: 'bg-slate-100 text-slate-700' },
   { value: 'in_progress', label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
   { value: 'completed', label: 'Completed', color: 'bg-accent/10 text-accent' },
+  { value: 'inspected', label: 'Inspected', color: 'bg-green-100 text-green-700' },
   { value: 'skipped', label: 'Skipped', color: 'bg-slate-100 text-muted' },
 ];
 
@@ -79,9 +80,11 @@ export default function HousekeepingPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [tab, setTab] = useState<'tasks' | 'maintenance'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'maintenance' | 'rooms'>('tasks');
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<{ id: string; name: string; floor: string | null; room_type?: { name: string } }[]>([]);
+  const [perf, setPerf] = useState<{ staffPerformance: { staff: string; totalCompleted: number; avgMinutes: number | null }[]; dailyTrend: { date: string; completed: number; total: number }[] } | null>(null);
 
   const [form, setForm] = useState({
     task_type: 'custom',
@@ -117,16 +120,19 @@ export default function HousekeepingPage() {
       if (filterDate) params.set('date', filterDate);
       const qs = params.toString() ? `?${params.toString()}` : '';
 
-      const [tasksRes, statsRes, maintRes, staffRes] = await Promise.all([
+      const [tasksRes, statsRes, maintRes, staffRes, roomsRes] = await Promise.all([
         api.get<HKTask[]>(`/properties/${property.id}/housekeeping${qs}`),
         api.get<Stats>(`/properties/${property.id}/housekeeping/stats${filterDate ? `?date=${filterDate}` : ''}`),
         api.get<MaintenanceSummary>(`/properties/${property.id}/housekeeping/maintenance-summary`),
         api.get<StaffMember[]>(`/properties/${property.id}/staff`).catch(() => [] as StaffMember[]),
+        api.get<any[]>(`/properties/${property.id}/rooms`).catch(() => [] as any[]),
       ]);
       setTasks(Array.isArray(tasksRes) ? tasksRes : []);
       setStats(statsRes || { pending: 0, in_progress: 0, completed: 0, skipped: 0 });
       setMaintSummary(maintRes || null);
       setStaffMembers(Array.isArray(staffRes) ? staffRes : []);
+      setRooms(Array.isArray(roomsRes) ? roomsRes : []);
+      api.get<any>(`/properties/${property.id}/housekeeping/performance`).then(setPerf).catch(() => {});
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -256,6 +262,9 @@ export default function HousekeepingPage() {
         <button onClick={() => setTab('maintenance')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'maintenance' ? 'bg-white shadow-sm text-primary' : 'text-muted hover:text-slate-700'}`}>
           <Wrench size={14} className="inline mr-1" />Maintenance
         </button>
+        <button onClick={() => setTab('rooms')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'rooms' ? 'bg-white shadow-sm text-primary' : 'text-muted hover:text-slate-700'}`}>
+          <Building2 size={14} className="inline mr-1" />Room Board
+        </button>
       </div>
 
       {tab === 'tasks' && (
@@ -279,6 +288,29 @@ export default function HousekeepingPage() {
               <p className="text-2xl font-bold mt-1">{total > 0 ? Math.round((stats.completed / total) * 100) : 0}%</p>
             </div>
           </div>
+
+          {/* Staff Performance (30-day) */}
+          {perf && perf.staffPerformance.length > 0 && (
+            <div className="bg-white rounded-xl border border-border shadow-sm p-4 mb-6">
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">Staff Performance (30 days)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {perf.staffPerformance.map((s) => (
+                  <div key={s.staff} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm text-slate-900">{s.staff}</p>
+                      <p className="text-xs text-muted">{s.totalCompleted} tasks completed</p>
+                    </div>
+                    {s.avgMinutes != null && (
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-primary">{s.avgMinutes}m</p>
+                        <p className="text-xs text-muted">avg time</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3 mb-4">
@@ -488,6 +520,91 @@ export default function HousekeepingPage() {
         </div>
       )}
 
+      {tab === 'rooms' && (
+        <div>
+          <p className="text-sm text-muted mb-4">Visual overview of every room&apos;s housekeeping status for today.</p>
+          {rooms.length === 0 ? (
+            <div className="bg-white rounded-xl border border-border shadow-sm p-12 text-center">
+              <Building2 size={40} className="mx-auto text-muted mb-3" />
+              <h3 className="font-semibold mb-1">No rooms found</h3>
+              <p className="text-sm text-muted">Add rooms in the Rooms page first.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {rooms.map((room) => {
+                const roomTasks = tasks.filter((t) => t.room?.id === room.id);
+                const activeTasks = roomTasks.filter((t) => t.status !== 'skipped');
+                const hasMaintenance = roomTasks.some((t) => t.task_type === 'maintenance' && t.blocks_room && t.status !== 'completed');
+                let roomStatus: 'clean' | 'dirty' | 'in_progress' | 'maintenance' = 'clean';
+                let statusColor = 'bg-green-50 border-green-200';
+                let statusLabel = 'Clean';
+                let statusIcon = <CheckCircle2 size={18} className="text-green-500" />;
+
+                if (hasMaintenance) {
+                  roomStatus = 'maintenance';
+                  statusColor = 'bg-red-50 border-red-200';
+                  statusLabel = 'Maintenance';
+                  statusIcon = <Wrench size={18} className="text-red-500" />;
+                } else if (activeTasks.some((t) => t.status === 'in_progress')) {
+                  roomStatus = 'in_progress';
+                  statusColor = 'bg-amber-50 border-amber-200';
+                  statusLabel = 'Cleaning';
+                  statusIcon = <Sparkles size={18} className="text-amber-500" />;
+                } else if (activeTasks.some((t) => t.status === 'pending')) {
+                  roomStatus = 'dirty';
+                  statusColor = 'bg-slate-50 border-slate-300';
+                  statusLabel = 'Needs Cleaning';
+                  statusIcon = <AlertTriangle size={18} className="text-slate-400" />;
+                }
+
+                const assignee = activeTasks.find((t) => t.assigned_to)?.assigned_to;
+
+                return (
+                  <div key={room.id} className={`rounded-xl border-2 ${statusColor} p-4 transition-all hover:shadow-md`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-slate-900">{room.name}</span>
+                      {statusIcon}
+                    </div>
+                    <p className="text-xs text-slate-500 mb-2">{room.room_type?.name || ''}{room.floor ? ` · ${room.floor}` : ''}</p>
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                      roomStatus === 'clean' ? 'bg-green-100 text-green-700' :
+                      roomStatus === 'dirty' ? 'bg-slate-200 text-slate-700' :
+                      roomStatus === 'in_progress' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {statusLabel}
+                    </span>
+                    {assignee && (
+                      <p className="text-xs text-muted mt-2 flex items-center gap-1">
+                        <UserPlus size={10} /> {assignee}
+                      </p>
+                    )}
+                    {roomStatus !== 'clean' && activeTasks.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {activeTasks.filter((t) => t.status !== 'completed').slice(0, 2).map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={() => {
+                              const nextStatus = t.status === 'pending' ? 'in_progress' : t.status === 'in_progress' ? 'completed' : 'inspected';
+                              updateTaskStatus(t.id, nextStatus);
+                            }}
+                            className="w-full text-left text-xs px-2 py-1 rounded bg-white/70 hover:bg-white border border-slate-200 truncate"
+                            title={`Click to ${t.status === 'pending' ? 'start' : 'complete'}: ${t.title}`}
+                          >
+                            {t.status === 'pending' ? <Circle size={10} className="inline mr-1" /> : <Clock size={10} className="inline mr-1" />}
+                            {t.title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Create form modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -527,7 +644,12 @@ export default function HousekeepingPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Assigned to</label>
-                  <input value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })} className={inputClass} placeholder="Staff name" />
+                  <select value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })} className={inputClass}>
+                    <option value="">Unassigned</option>
+                    {staffMembers.map((s) => (
+                      <option key={s.id} value={`${s.user.first_name} ${s.user.last_name}`}>{s.user.first_name} {s.user.last_name} ({s.role})</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -612,7 +734,12 @@ export default function HousekeepingPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Assigned to</label>
-                <input value={editForm.assigned_to} onChange={(e) => setEditForm({ ...editForm, assigned_to: e.target.value })} className={inputClass} placeholder="Staff name" />
+                <select value={editForm.assigned_to} onChange={(e) => setEditForm({ ...editForm, assigned_to: e.target.value })} className={inputClass}>
+                  <option value="">Unassigned</option>
+                  {staffMembers.map((s) => (
+                    <option key={s.id} value={`${s.user.first_name} ${s.user.last_name}`}>{s.user.first_name} {s.user.last_name} ({s.role})</option>
+                  ))}
+                </select>
               </div>
 
               <div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart3, TrendingUp, BedDouble, Globe, Receipt, AlertCircle, CreditCard, Download } from 'lucide-react';
+import { BarChart3, TrendingUp, BedDouble, Globe, Receipt, AlertCircle, CreditCard, Download, Printer } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { formatDate, formatCurrency } from '../../lib/format';
 import { api } from '../../lib/api';
@@ -96,6 +96,7 @@ export default function ReportsPage() {
   const [kpi, setKpi] = useState<KpiData | null>(null);
   const [yoy, setYoy] = useState<YoyData | null>(null);
   const [yoyYear, setYoyYear] = useState(new Date().getFullYear());
+  const [reportError, setReportError] = useState('');
 
   const fetchReports = async () => {
     if (!property) return;
@@ -118,8 +119,8 @@ export default function ReportsPage() {
       setOutstanding(out);
       setKpi(kpiData);
       setYoy(yoyData);
-    } catch {
-      // silently fail — empty state shown
+    } catch (err: any) {
+      setReportError(err.message || 'Failed to load reports');
     } finally {
       setLoading(false);
     }
@@ -140,6 +141,7 @@ export default function ReportsPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {reportError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm flex items-center gap-2"><AlertCircle size={16} />{reportError}</div>}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">Reports</h2>
@@ -168,7 +170,13 @@ export default function ReportsPage() {
             <option value="week">Weekly</option>
             <option value="month">Monthly</option>
           </select>
-          <div className="relative group">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-slate-50 print:hidden"
+          >
+            <Printer size={16} /> Print PDF
+          </button>
+          <div className="relative group print:hidden">
             <button className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg hover:bg-slate-50">
               <Download size={16} /> Export CSV
             </button>
@@ -219,7 +227,7 @@ export default function ReportsPage() {
                   <TrendingUp size={18} />
                 </div>
               </div>
-              <p className="text-2xl font-bold">R {(revenue?.overall.totalRevenue ?? 0).toLocaleString()}</p>
+              <p className="text-2xl font-bold">{formatCurrency(revenue?.overall.totalRevenue ?? 0)}</p>
               <p className="text-xs text-muted mt-1">{revenue?.overall.paymentCount ?? 0} payments</p>
             </div>
 
@@ -242,9 +250,9 @@ export default function ReportsPage() {
                 </div>
               </div>
               <p className="text-2xl font-bold">
-                R {sources.length > 0
-                  ? Math.round(sources.reduce((s, r) => s + r.totalRevenue, 0) / sources.reduce((s, r) => s + r.bookingCount, 0) || 0).toLocaleString()
-                  : '0'}
+                {formatCurrency(sources.length > 0
+                  ? Math.round(sources.reduce((s, r) => s + r.totalRevenue, 0) / sources.reduce((s, r) => s + r.bookingCount, 0) || 0)
+                  : 0)}
               </p>
               <p className="text-xs text-muted mt-1">per booking</p>
             </div>
@@ -255,12 +263,12 @@ export default function ReportsPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <div className="bg-white rounded-xl p-5 border border-border shadow-sm">
                 <span className="text-sm text-muted">ADR</span>
-                <p className="text-2xl font-bold mt-1">R{kpi.adr.toLocaleString()}</p>
+                <p className="text-2xl font-bold mt-1">{formatCurrency(kpi.adr)}</p>
                 <p className="text-xs text-muted mt-1">Average Daily Rate</p>
               </div>
               <div className="bg-white rounded-xl p-5 border border-border shadow-sm">
                 <span className="text-sm text-muted">RevPAR</span>
-                <p className="text-2xl font-bold mt-1">R{kpi.revpar.toLocaleString()}</p>
+                <p className="text-2xl font-bold mt-1">{formatCurrency(kpi.revpar)}</p>
                 <p className="text-xs text-muted mt-1">Revenue Per Available Room</p>
               </div>
               <div className="bg-white rounded-xl p-5 border border-border shadow-sm">
@@ -270,7 +278,7 @@ export default function ReportsPage() {
               </div>
               <div className="bg-white rounded-xl p-5 border border-border shadow-sm">
                 <span className="text-sm text-muted">Avg Booking Value</span>
-                <p className="text-2xl font-bold mt-1">R{kpi.avgBookingValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold mt-1">{formatCurrency(kpi.avgBookingValue)}</p>
                 <p className="text-xs text-muted mt-1">{kpi.totalBookings} bookings</p>
               </div>
             </div>
@@ -319,7 +327,7 @@ export default function ReportsPage() {
                       <div key={p.period}>
                         <div className="flex justify-between text-sm mb-1">
                           <span className="text-slate-700">{p.period}</span>
-                          <span className="font-medium">R {p.revenue.toLocaleString()}</span>
+                          <span className="font-medium">{formatCurrency(p.revenue)}</span>
                         </div>
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div
@@ -373,7 +381,7 @@ export default function ReportsPage() {
                         <p className="text-sm font-medium capitalize">{p.provider || 'Unknown'}</p>
                         <p className="text-xs text-muted">{p.paymentCount} payments</p>
                       </div>
-                      <span className="text-sm font-semibold">R {p.revenue.toLocaleString()}</span>
+                      <span className="text-sm font-semibold">{formatCurrency(p.revenue)}</span>
                     </div>
                   ))}
                 </div>
@@ -393,11 +401,11 @@ export default function ReportsPage() {
                     <div key={s.source} className="p-4">
                       <div className="flex items-center justify-between mb-1">
                         <p className="text-sm font-medium capitalize">{s.source || 'Unknown'}</p>
-                        <span className="text-sm font-semibold">R {s.totalRevenue.toLocaleString()}</span>
+                        <span className="text-sm font-semibold">{formatCurrency(s.totalRevenue)}</span>
                       </div>
                       <div className="flex gap-3 text-xs text-muted">
                         <span>{s.bookingCount} bookings</span>
-                        <span>Avg R {s.avgBookingValue.toLocaleString()}</span>
+                        <span>Avg {formatCurrency(s.avgBookingValue)}</span>
                       </div>
                     </div>
                   ))}
@@ -413,34 +421,34 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Gross Revenue</p>
-                  <p className="text-xl font-bold mt-1">R{financial.grossRevenue.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1">{formatCurrency(financial.grossRevenue)}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Refunds</p>
-                  <p className="text-xl font-bold mt-1 text-danger">-R{financial.totalRefunds.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1 text-danger">-{formatCurrency(financial.totalRefunds)}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Net Revenue</p>
-                  <p className="text-xl font-bold mt-1 text-accent">R{financial.netRevenue.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1 text-accent">{formatCurrency(financial.netRevenue)}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">VAT ({financial.vatRate}%)</p>
-                  <p className="text-xl font-bold mt-1">R{financial.vatAmount.toLocaleString()}</p>
-                  <p className="text-xs text-muted mt-1">Ex-VAT: R{financial.revenueExVat.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1">{formatCurrency(financial.vatAmount)}</p>
+                  <p className="text-xs text-muted mt-1">Ex-VAT: {formatCurrency(financial.revenueExVat)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mt-3">
                 <div className="bg-white rounded-lg border border-border p-3 text-center">
                   <p className="text-xs text-muted">Deposits</p>
-                  <p className="text-sm font-semibold">R{financial.depositsCollected.toLocaleString()}</p>
+                  <p className="text-sm font-semibold">{formatCurrency(financial.depositsCollected)}</p>
                 </div>
                 <div className="bg-white rounded-lg border border-border p-3 text-center">
                   <p className="text-xs text-muted">Balances</p>
-                  <p className="text-sm font-semibold">R{financial.balancesCollected.toLocaleString()}</p>
+                  <p className="text-sm font-semibold">{formatCurrency(financial.balancesCollected)}</p>
                 </div>
                 <div className="bg-white rounded-lg border border-border p-3 text-center">
                   <p className="text-xs text-muted">Full Payments</p>
-                  <p className="text-sm font-semibold">R{financial.fullPayments.toLocaleString()}</p>
+                  <p className="text-sm font-semibold">{formatCurrency(financial.fullPayments)}</p>
                 </div>
                 <div className="bg-white rounded-lg border border-border p-3 text-center">
                   <p className="text-xs text-muted">Completed</p>
@@ -465,20 +473,20 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Total Outstanding</p>
-                  <p className="text-xl font-bold mt-1 text-danger">R{outstanding.totalOutstanding.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1 text-danger">{formatCurrency(outstanding.totalOutstanding)}</p>
                   <p className="text-xs text-muted mt-1">{outstanding.bookingCount} bookings</p>
                 </div>
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Due within 7 days</p>
-                  <p className="text-xl font-bold mt-1">R{outstanding.aging.within7Days.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1">{formatCurrency(outstanding.aging.within7Days)}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Due 8-30 days</p>
-                  <p className="text-xl font-bold mt-1">R{outstanding.aging.within30Days.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1">{formatCurrency(outstanding.aging.within30Days)}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-border shadow-sm p-4">
                   <p className="text-sm text-muted">Due 30+ days</p>
-                  <p className="text-xl font-bold mt-1">R{outstanding.aging.over30Days.toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1">{formatCurrency(outstanding.aging.over30Days)}</p>
                 </div>
               </div>
               {outstanding.bookings.length > 0 && (
@@ -550,8 +558,8 @@ export default function ReportsPage() {
                           <td className={`py-3 px-4 text-right font-medium ${occDiff > 0 ? 'text-green-600' : occDiff < 0 ? 'text-red-600' : 'text-slate-400'}`}>
                             {occDiff > 0 ? '+' : ''}{occDiff.toFixed(1)}pp
                           </td>
-                          <td className="py-3 px-4 text-right">R{m.previousYear.revenue.toLocaleString()}</td>
-                          <td className="py-3 px-4 text-right">R{m.currentYear.revenue.toLocaleString()}</td>
+                          <td className="py-3 px-4 text-right">{formatCurrency(m.previousYear.revenue)}</td>
+                          <td className="py-3 px-4 text-right">{formatCurrency(m.currentYear.revenue)}</td>
                           <td className={`py-3 px-4 text-right font-medium ${revDiff > 0 ? 'text-green-600' : revDiff < 0 ? 'text-red-600' : 'text-slate-400'}`}>
                             {revDiff > 0 ? '+' : ''}{revDiff}%
                           </td>

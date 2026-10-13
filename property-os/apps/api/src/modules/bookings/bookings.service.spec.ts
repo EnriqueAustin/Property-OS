@@ -17,8 +17,10 @@ import { Property } from '../properties/entities/property.entity';
 import { BOOKING_EVENTS } from './events/booking.events';
 import { PricingService } from '../pricing/pricing.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { RatePlansService } from '../inventory/rate-plans.service';
 import { PromosService } from '../promos/promos.service';
 import { TourismLevyService } from '../tourism-levy/tourism-levy.service';
+import { PaymentsService } from '../payments/payments.service';
 
 const mockPricingService = {
   calculatePrice: jest.fn().mockResolvedValue({ price: 1000, appliedRules: [] }),
@@ -38,6 +40,19 @@ const mockTourismLevyService = {
   getSettings: jest.fn().mockResolvedValue({ enabled: false }),
   calculateLevy: jest.fn().mockReturnValue({ levyAmount: 0, rate: 0 }),
   createRecord: jest.fn().mockResolvedValue({}),
+};
+
+const mockRatePlansService = {
+  getEffectiveRatePlan: jest.fn().mockResolvedValue(null),
+  listRatePlans: jest.fn().mockResolvedValue([]),
+};
+
+const mockPaymentsService = {
+  getBookingPaymentSummary: jest
+    .fn()
+    .mockResolvedValue({ totalPaid: 0, balance: 0, fullyPaid: false }),
+  getSettings: jest.fn().mockResolvedValue({}),
+  initiatePayfast: jest.fn().mockResolvedValue({ redirectUrl: '' }),
 };
 
 const mockBooking = {
@@ -120,8 +135,10 @@ describe('BookingsService', () => {
         { provide: EventEmitter2, useValue: mockEventEmitter },
         { provide: PricingService, useValue: mockPricingService },
         { provide: InventoryService, useValue: mockInventoryService },
+        { provide: RatePlansService, useValue: mockRatePlansService },
         { provide: PromosService, useValue: mockPromosService },
         { provide: TourismLevyService, useValue: mockTourismLevyService },
+        { provide: PaymentsService, useValue: mockPaymentsService },
       ],
     }).compile();
 
@@ -140,7 +157,7 @@ describe('BookingsService', () => {
           { room_id: 'room-1', date: new Date('2026-06-01'), status: 'available' },
           { room_id: 'room-1', date: new Date('2026-06-02'), status: 'available' },
         ])
-        .mockResolvedValueOnce([{ next_seq: '5' }]) // ref number
+        .mockResolvedValueOnce([]) // ref number uniqueness check (no collision)
         .mockResolvedValueOnce(undefined); // update availability
 
       mockManager.findOne.mockImplementation((entity: any) => {
@@ -222,14 +239,14 @@ describe('BookingsService', () => {
           { room_id: 'room-1', date: new Date('2026-06-01'), status: 'available' },
           { room_id: 'room-1', date: new Date('2026-06-02'), status: 'available' },
         ])
-        .mockResolvedValueOnce([{ next_seq: '10' }]) // ref number 1
+        .mockResolvedValueOnce([]) // ref number 1 uniqueness check (no collision)
         .mockResolvedValueOnce(undefined) // update availability 1
         // Room 2 availability
         .mockResolvedValueOnce([
           { room_id: 'room-2', date: new Date('2026-06-01'), status: 'available' },
           { room_id: 'room-2', date: new Date('2026-06-02'), status: 'available' },
         ])
-        .mockResolvedValueOnce([{ next_seq: '11' }]) // ref number 2
+        .mockResolvedValueOnce([]) // ref number 2 uniqueness check (no collision)
         .mockResolvedValueOnce(undefined); // update availability 2
 
       let bookingCallCount = 0;
@@ -286,7 +303,7 @@ describe('BookingsService', () => {
           { room_id: 'room-1', date: new Date('2026-06-01'), status: 'available' },
           { room_id: 'room-1', date: new Date('2026-06-02'), status: 'available' },
         ])
-        .mockResolvedValueOnce([{ next_seq: '10' }])
+        .mockResolvedValueOnce([]) // ref number uniqueness check (no collision)
         .mockResolvedValueOnce(undefined)
         .mockResolvedValueOnce([ // room 2 booked
           { room_id: 'room-2', date: new Date('2026-06-01'), status: 'booked' },
@@ -626,6 +643,7 @@ describe('BookingsService', () => {
         orderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
         getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
       };
       bookingsRepo.createQueryBuilder.mockReturnValue(qb);
@@ -643,6 +661,7 @@ describe('BookingsService', () => {
         orderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
         getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
       };
       bookingsRepo.createQueryBuilder.mockReturnValue(qb);

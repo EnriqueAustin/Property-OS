@@ -14,7 +14,11 @@ import { PropertiesModule } from '../properties/properties.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification, NotificationSettings, EmailTemplate]),
+    TypeOrmModule.forFeature([
+      Notification,
+      NotificationSettings,
+      EmailTemplate,
+    ]),
     BookingsModule,
     PropertiesModule,
   ],
@@ -26,6 +30,6 @@ import { PropertiesModule } from '../properties/properties.module';
     EmailTemplatesService,
   ],
   controllers: [NotificationsController],
-  exports: [NotificationsService, EmailTemplatesService],
+  exports: [NotificationsService, EmailTemplatesService, EmailProvider],
 })
 export class NotificationsModule {}

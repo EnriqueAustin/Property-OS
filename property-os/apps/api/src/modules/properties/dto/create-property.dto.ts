@@ -121,4 +121,8 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   cancellation_policy?: string;
+
+  @IsOptional()
+  @IsIn(['hotel', 'guesthouse'])
+  booking_mode?: string;
 }

@@ -205,7 +205,7 @@ describe('HousekeepingService', () => {
       tasksRepo.findOne.mockResolvedValue(mockTask());
       tasksRepo.save.mockImplementation((data) => Promise.resolve({ ...data }));
 
-      const result = await service.update('task-1', { status: TaskStatus.IN_PROGRESS } as any);
+      const result = await service.update('task-1', 'prop-1', { status: TaskStatus.IN_PROGRESS } as any);
 
       expect(result.status).toBe(TaskStatus.IN_PROGRESS);
     });
@@ -214,7 +214,7 @@ describe('HousekeepingService', () => {
       tasksRepo.findOne.mockResolvedValue(mockTask({ status: TaskStatus.IN_PROGRESS }));
       tasksRepo.save.mockImplementation((data) => Promise.resolve({ ...data }));
 
-      await service.update('task-1', { status: TaskStatus.COMPLETED } as any);
+      await service.update('task-1', 'prop-1', { status: TaskStatus.COMPLETED } as any);
 
       expect(tasksRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ completed_at: expect.any(Date) }),
@@ -226,7 +226,7 @@ describe('HousekeepingService', () => {
       tasksRepo.findOne.mockResolvedValue(alreadyCompleted);
       tasksRepo.save.mockImplementation((data) => Promise.resolve({ ...data }));
 
-      await service.update('task-1', { status: TaskStatus.COMPLETED } as any);
+      await service.update('task-1', 'prop-1', { status: TaskStatus.COMPLETED } as any);
 
       expect(tasksRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ completed_at: alreadyCompleted.completed_at }),
@@ -236,7 +236,7 @@ describe('HousekeepingService', () => {
     it('should throw NotFoundException when task does not exist', async () => {
       tasksRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.update('nope', {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.update('nope', 'prop-1', {} as any)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -246,7 +246,7 @@ describe('HousekeepingService', () => {
       tasksRepo.findOne.mockResolvedValue(existing);
       tasksRepo.remove.mockResolvedValue(undefined);
 
-      await service.remove('task-1');
+      await service.remove('task-1', 'prop-1');
 
       expect(tasksRepo.remove).toHaveBeenCalledWith(existing);
     });
@@ -254,7 +254,7 @@ describe('HousekeepingService', () => {
     it('should throw NotFoundException when task not found', async () => {
       tasksRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.remove('nope')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('nope', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 

@@ -221,8 +221,10 @@ export class AlertsService {
     return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async updateAlert(alertId: string, status: AlertStatus) {
-    const alert = await this.alertsRepo.findOne({ where: { id: alertId } });
+  async updateAlert(alertId: string, propertyId: string, status: AlertStatus) {
+    const alert = await this.alertsRepo.findOne({
+      where: { id: alertId, property_id: propertyId },
+    });
     if (!alert) throw new NotFoundException('Alert not found');
     alert.status = status;
     if (status === AlertStatus.ACKNOWLEDGED) alert.acknowledged_at = new Date();

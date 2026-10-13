@@ -24,6 +24,7 @@ import {
   CreateChannelMappingDto,
   UpdateChannelMappingDto,
 } from './dto/channel-mapping.dto';
+import { safeFetch } from '../../common/security/safe-fetch';
 
 const CHANNEL_TO_SOURCE: Record<ChannelType, BookingSource> = {
   [ChannelType.BOOKING_COM]: BookingSource.BOOKING_COM,
@@ -94,17 +95,21 @@ export class ChannelsService {
     });
   }
 
-  async getChannel(channelId: string): Promise<Channel> {
+  async getChannel(channelId: string, propertyId: string): Promise<Channel> {
     const ch = await this.channelsRepo.findOne({
-      where: { id: channelId },
+      where: { id: channelId, property_id: propertyId },
       relations: ['mappings', 'mappings.room_type'],
     });
     if (!ch) throw new NotFoundException('Channel not found');
     return ch;
   }
 
-  async updateChannel(channelId: string, dto: UpdateChannelDto): Promise<Channel> {
-    const ch = await this.getChannel(channelId);
+  async updateChannel(
+    channelId: string,
+    propertyId: string,
+    dto: UpdateChannelDto,
+  ): Promise<Channel> {
+    const ch = await this.getChannel(channelId, propertyId);
     if (dto.name !== undefined) ch.name = dto.name;
     if (dto.status !== undefined) ch.status = dto.status;
     if (dto.icalImportUrl !== undefined) ch.ical_import_url = dto.icalImportUrl;
@@ -114,8 +119,8 @@ export class ChannelsService {
     return this.channelsRepo.save(ch);
   }
 
-  async deleteChannel(channelId: string): Promise<void> {
-    const ch = await this.getChannel(channelId);
+  async deleteChannel(channelId: string, propertyId: string): Promise<void> {
+    const ch = await this.getChannel(channelId, propertyId);
     await this.channelsRepo.remove(ch);
   }
 
@@ -123,9 +128,18 @@ export class ChannelsService {
 
   async addMapping(
     channelId: string,
+    propertyId: string,
     dto: CreateChannelMappingDto,
   ): Promise<ChannelMapping> {
-    await this.getChannel(channelId);
+    await this.getChannel(channelId, propertyId);
+
+    // Ensure the room type being mapped belongs to the same property.
+    const roomType = await this.roomTypesRepo.findOne({
+      where: { id: dto.roomTypeId, property_id: propertyId },
+    });
+    if (!roomType) {
+      throw new NotFoundException('Room type not found');
+    }
 
     const existing = await this.mappingsRepo.findOne({
       where: { channel_id: channelId, room_type_id: dto.roomTypeId },
@@ -147,12 +161,17 @@ export class ChannelsService {
 
   async updateMapping(
     mappingId: string,
+    channelId: string,
+    propertyId: string,
     dto: UpdateChannelMappingDto,
   ): Promise<ChannelMapping> {
     const mapping = await this.mappingsRepo.findOne({
-      where: { id: mappingId },
+      where: { id: mappingId, channel_id: channelId },
+      relations: ['channel'],
     });
-    if (!mapping) throw new NotFoundException('Mapping not found');
+    if (!mapping || mapping.channel?.property_id !== propertyId) {
+      throw new NotFoundException('Mapping not found');
+    }
 
     Object.assign(mapping, {
       ...(dto.externalListingId !== undefined && { external_listing_id: dto.externalListingId }),
@@ -166,11 +185,18 @@ export class ChannelsService {
     return this.mappingsRepo.save(mapping);
   }
 
-  async removeMapping(mappingId: string): Promise<void> {
+  async removeMapping(
+    mappingId: string,
+    channelId: string,
+    propertyId: string,
+  ): Promise<void> {
     const mapping = await this.mappingsRepo.findOne({
-      where: { id: mappingId },
+      where: { id: mappingId, channel_id: channelId },
+      relations: ['channel'],
     });
-    if (!mapping) throw new NotFoundException('Mapping not found');
+    if (!mapping || mapping.channel?.property_id !== propertyId) {
+      throw new NotFoundException('Mapping not found');
+    }
     await this.mappingsRepo.remove(mapping);
   }
 
@@ -297,10 +323,10 @@ export class ChannelsService {
 
   // --- iCal Import (inbound sync) -------------------------------------------
 
-  async syncICalImport(channelId: string): Promise<SyncLog> {
+  async syncICalImport(channelId: string, propertyId?: string): Promise<SyncLog> {
     const start = Date.now();
     const channel = await this.channelsRepo.findOne({
-      where: { id: channelId },
+      where: { id: channelId, ...(propertyId ? { property_id: propertyId } : {}) },
       relations: ['mappings'],
     });
     if (!channel) throw new NotFoundException('Channel not found');
@@ -315,7 +341,7 @@ export class ChannelsService {
     });
 
     try {
-      const response = await fetch(channel.ical_import_url);
+      const response = await safeFetch(channel.ical_import_url);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -510,8 +536,10 @@ export class ChannelsService {
 
   async getSyncLogs(
     channelId: string,
+    propertyId: string,
     limit = 20,
   ): Promise<SyncLog[]> {
+    await this.getChannel(channelId, propertyId);
     return this.syncLogsRepo.find({
       where: { channel_id: channelId },
       order: { created_at: 'DESC' },
@@ -615,12 +643,15 @@ export class ChannelsService {
 
   // --- Connection test -------------------------------------------------------
 
-  async testConnection(channelId: string): Promise<{ connected: boolean; message: string }> {
-    const channel = await this.getChannel(channelId);
+  async testConnection(
+    channelId: string,
+    propertyId: string,
+  ): Promise<{ connected: boolean; message: string }> {
+    const channel = await this.getChannel(channelId, propertyId);
 
     if (channel.ical_import_url) {
       try {
-        const res = await fetch(channel.ical_import_url, { method: 'HEAD' });
+        const res = await safeFetch(channel.ical_import_url, { method: 'HEAD' });
         if (res.ok) {
           return { connected: true, message: 'iCal feed is reachable' };
         }

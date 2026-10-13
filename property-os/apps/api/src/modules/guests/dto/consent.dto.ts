@@ -43,6 +43,19 @@ export class ErasureRequestDto {
   email: string;
 }
 
+export class ConfirmErasureDto {
+  @IsString()
+  token: string;
+}
+
+export class CancelErasureDto {
+  @IsString()
+  referenceNumber: string;
+
+  @IsEmail()
+  email: string;
+}
+
 export class UpdateRetentionSettingsDto {
   @IsOptional()
   @IsInt()

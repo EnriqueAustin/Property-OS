@@ -1,8 +1,10 @@
 import { IsArray, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { PropertyUserRole } from '../entities/property-user.entity';
 import { Permission } from '../../../common/permissions/permissions.enum';
 
 export class InviteStaffDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
   @IsEmail()
   email: string;
 

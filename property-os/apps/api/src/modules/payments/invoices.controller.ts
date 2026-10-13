@@ -73,6 +73,16 @@ export class InvoicesController {
     return this.invoices.cancelInvoice(invoiceId, propertyId);
   }
 
+  @Get('properties/:propertyId/bookings/:bookingId/invoice')
+  @UseGuards(PropertyGuard)
+  @RequirePermission(Permission.PAYMENTS_VIEW)
+  getForBooking(
+    @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
+    @Param('bookingId', new ParseUUIDPipe()) bookingId: string,
+  ) {
+    return this.invoices.getInvoiceForBooking(bookingId, propertyId);
+  }
+
   @Post('properties/:propertyId/bookings/:bookingId/invoice/send')
   @UseGuards(PropertyGuard)
   @RequirePermission(Permission.PAYMENTS_MANAGE)

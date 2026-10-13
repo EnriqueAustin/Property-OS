@@ -29,6 +29,7 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [fetchError, setFetchError] = useState('');
 
   const fetchInvoices = () => {
     if (!property) return;
@@ -40,7 +41,7 @@ export default function InvoicesPage() {
         setInvoices(res.data || []);
         setMeta(res.meta || { page: 1, totalPages: 1, total: 0 });
       })
-      .catch(() => {})
+      .catch((err: any) => { setFetchError(err.message || 'Failed to load invoices'); })
       .finally(() => setLoading(false));
   };
 
@@ -87,6 +88,8 @@ export default function InvoicesPage() {
           <p className="text-sm text-muted mt-1">Tax invoices, proforma invoices, and credit notes.</p>
         </div>
       </div>
+
+      {fetchError && <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">{fetchError}</div>}
 
       <div className="mb-6">
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="px-3 py-2 border border-border rounded-lg text-sm">

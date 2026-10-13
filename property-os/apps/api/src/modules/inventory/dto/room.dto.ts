@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsInt,
   IsOptional,
@@ -31,6 +32,11 @@ export class CreateRoomDto {
   @IsOptional()
   @IsInt()
   sort_order?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  photos?: string[];
 }
 
 export class UpdateRoomDto extends PartialType(CreateRoomDto) {}

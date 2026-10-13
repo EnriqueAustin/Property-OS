@@ -30,6 +30,10 @@ export class GuestDto {
   @IsOptional()
   @IsString()
   country?: string;
+
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
 }
 
 const SOURCES = [

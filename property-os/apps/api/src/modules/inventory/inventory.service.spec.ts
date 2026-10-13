@@ -262,14 +262,14 @@ describe('InventoryService', () => {
     it('should delete an existing rate period', async () => {
       ratePeriodRepo.findOne.mockResolvedValue({ id: 'rp-1' });
 
-      await service.deleteRatePeriod('rp-1');
+      await service.deleteRatePeriod('rp-1', 'prop-1');
       expect(ratePeriodRepo.remove).toHaveBeenCalled();
     });
 
     it('should throw when rate period not found', async () => {
       ratePeriodRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.deleteRatePeriod('rp-nope')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteRatePeriod('rp-nope', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 });

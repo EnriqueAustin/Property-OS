@@ -47,7 +47,7 @@ export default function AvailabilityPage() {
           setSelectedRoomIds(data[0]!.rooms?.map((r) => r.id) || []);
         }
       })
-      .catch(() => {})
+      .catch((err: any) => { setError(err.message || 'Failed to load room types'); })
       .finally(() => setLoading(false));
   }, [property]);
 

@@ -52,6 +52,18 @@ export class AccountingConnection {
   @Column({ type: 'timestamp with time zone', nullable: true })
   token_expires_at: Date;
 
+  // CSRF protection for the OAuth flow: a random, single-use value bound to
+  // this connection/property/user. Generated when a connect flow is started and
+  // verified (then cleared) on the provider callback.
+  @Column({ type: 'text', nullable: true })
+  oauth_state: string | null;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  oauth_state_expires_at: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  oauth_state_user_id: string | null;
+
   @Column({
     type: 'varchar',
     length: 20,

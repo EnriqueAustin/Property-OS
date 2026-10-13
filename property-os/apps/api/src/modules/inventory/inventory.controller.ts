@@ -60,7 +60,7 @@ export class InventoryController {
     @Param('roomTypeId', new ParseUUIDPipe()) roomTypeId: string,
     @Body() dto: UpdateRoomTypeDto,
   ) {
-    return this.inventory.updateRoomType(roomTypeId, dto);
+    return this.inventory.updateRoomType(roomTypeId, propertyId, dto);
   }
 
   // Rooms
@@ -89,7 +89,7 @@ export class InventoryController {
     @Param('roomId', new ParseUUIDPipe()) roomId: string,
     @Body() dto: UpdateRoomDto,
   ) {
-    return this.inventory.updateRoom(roomId, dto);
+    return this.inventory.updateRoom(roomId, propertyId, dto);
   }
 
   // Availability
@@ -161,7 +161,7 @@ export class InventoryController {
     @Param('ratePeriodId', new ParseUUIDPipe()) ratePeriodId: string,
     @Body() dto: UpdateRatePeriodDto,
   ) {
-    return this.inventory.updateRatePeriod(ratePeriodId, dto);
+    return this.inventory.updateRatePeriod(ratePeriodId, propertyId, dto);
   }
 
   @Delete('properties/:propertyId/rate-periods/:ratePeriodId')
@@ -172,6 +172,6 @@ export class InventoryController {
     @Param('propertyId', new ParseUUIDPipe()) propertyId: string,
     @Param('ratePeriodId', new ParseUUIDPipe()) ratePeriodId: string,
   ) {
-    return this.inventory.deleteRatePeriod(ratePeriodId);
+    return this.inventory.deleteRatePeriod(ratePeriodId, propertyId);
   }
 }
